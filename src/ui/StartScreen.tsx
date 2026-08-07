@@ -95,11 +95,10 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
 
       {error && <p className="mt-3 text-bad text-sm">{error}</p>}
 
-      <div className="mt-4 flex items-center justify-between text-sm">
+      <div className="mt-4 flex items-center text-sm">
         <button className="text-teal hover:underline" onClick={onShowLeaderboard}>
           🏆 View leaderboard
         </button>
-        <span className="text-white/40">No wallet. No sign-up. Just a code.</span>
       </div>
     </div>
   );
