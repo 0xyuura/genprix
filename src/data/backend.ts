@@ -44,8 +44,14 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-export const startRun = (username: string, avatar_seed: string) =>
-  rpc<StartRunResult>("start_run", { p_username: username, p_avatar_seed: avatar_seed });
+export const getActiveRoom = () => rpc<{ open: boolean }>("get_active_room", {});
+
+export const joinRoom = (code: string, username: string, avatar_seed: string) =>
+  rpc<StartRunResult>("join_room", {
+    p_code: code,
+    p_username: username,
+    p_avatar_seed: avatar_seed,
+  });
 
 export const answerQuestion = (
   run_id: string,
@@ -72,4 +78,10 @@ export const adminPublish = (passcode: string, questions: AdminQuestion[], bumpR
     p_passcode: passcode,
     p_questions: questions,
     p_bump: bumpRound,
+  });
+
+export const createRoom = (passcode: string, questions: AdminQuestion[]) =>
+  rpc<{ code: string; round: number }>("create_room", {
+    p_passcode: passcode,
+    p_questions: questions,
   });

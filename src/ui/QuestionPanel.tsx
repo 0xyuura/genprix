@@ -9,6 +9,8 @@ interface Props {
   reveal: boolean;
   lastResult: LastResult | null;
   submitting: boolean;
+  hintsLeft: number;
+  onUseHint: () => boolean;
   onSubmit: (answer: string) => void;
 }
 
@@ -18,10 +20,12 @@ export default function QuestionPanel({
   reveal,
   lastResult,
   submitting,
+  hintsLeft,
+  onUseHint,
   onSubmit,
 }: Props) {
   const [value, setValue] = useState("");
-  const [showHint, setShowHint] = useState(false);
+  const [hintShown, setHintShown] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TIME_LIMIT_MS);
   const inputRef = useRef<HTMLInputElement>(null);
   const deadlineRef = useRef(0);
@@ -30,7 +34,7 @@ export default function QuestionPanel({
   // Reset per question.
   useEffect(() => {
     setValue("");
-    setShowHint(false);
+    setHintShown(false);
     setTimeLeft(TIME_LIMIT_MS);
     firedRef.current = false;
     deadlineRef.current = performance.now() + TIME_LIMIT_MS;
@@ -80,15 +84,22 @@ export default function QuestionPanel({
       </p>
 
       {question.hint && !reveal && (
-        <button
-          className="mt-2 text-sm text-teal/80 hover:text-teal underline underline-offset-2"
-          onClick={() => setShowHint((h) => !h)}
-        >
-          {showHint ? "Hide hint" : "Show hint"}
-        </button>
-      )}
-      {showHint && question.hint && !reveal && (
-        <p className="mt-1 text-sm text-white/60 italic">💡 {question.hint}</p>
+        <div className="mt-2">
+          {hintShown ? (
+            <p className="text-sm text-white/60 italic">💡 {question.hint}</p>
+          ) : hintsLeft > 0 ? (
+            <button
+              className="text-sm text-teal/80 hover:text-teal underline underline-offset-2"
+              onClick={() => {
+                if (onUseHint()) setHintShown(true);
+              }}
+            >
+              Show hint ({hintsLeft} left this game)
+            </button>
+          ) : (
+            <span className="text-sm text-white/30">No hints left</span>
+          )}
+        </div>
       )}
 
       {!reveal ? (

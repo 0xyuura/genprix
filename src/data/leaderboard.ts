@@ -1,7 +1,17 @@
-// Leaderboard adapters. In SECURE mode scores are written ONLY by the finish_run RPC;
-// SupabaseAdapter is therefore read-only (no submit). In LOCAL/demo mode LocalAdapter
-// stores per-device scores in localStorage.
+// Leaderboard adapters. The board is GLOBAL and auto-resets every clock hour:
+// each score is tagged with an hour bucket (floor(epoch_ms / 3_600_000)) and the
+// board only shows the current bucket, so it wipes on its own at the top of each hour.
+// Secure mode writes scores only via the finish_run RPC; LocalAdapter (demo) uses
+// localStorage.
 import { supabase, isSecureMode } from "./supabase";
+
+export const HOUR_MS = 3_600_000;
+export function currentHourBucket(): number {
+  return Math.floor(Date.now() / HOUR_MS);
+}
+export function msUntilNextHour(): number {
+  return HOUR_MS - (Date.now() % HOUR_MS);
+}
 
 export interface Entry {
   username: string;
@@ -9,27 +19,23 @@ export interface Entry {
   score: number;
   correct: number;
   totalMs: number;
-  round: number;
+  hourBucket: number;
   createdAt: number;
 }
 
 export interface LeaderboardAdapter {
-  currentRound(): Promise<number>;
-  top(round: number, n: number): Promise<Entry[]>;
+  top(n: number): Promise<Entry[]>;
   /** Local-only: secure mode writes via finish_run and ignores this. */
   submit(entry: Entry): Promise<void>;
 }
 
 export function sortEntries(entries: Entry[]): Entry[] {
-  return [...entries].sort((a, b) => (b.score - a.score) || (a.totalMs - b.totalMs));
+  return [...entries].sort((a, b) => b.score - a.score || a.totalMs - b.totalMs);
 }
 
-const LS_KEY = "ggp_scores_v1";
+const LS_KEY = "ggp_scores_v2";
 
 export class LocalAdapter implements LeaderboardAdapter {
-  async currentRound(): Promise<number> {
-    return 1;
-  }
   private read(): Entry[] {
     try {
       return JSON.parse(localStorage.getItem(LS_KEY) || "[]") as Entry[];
@@ -40,24 +46,24 @@ export class LocalAdapter implements LeaderboardAdapter {
   async submit(entry: Entry): Promise<void> {
     const all = this.read();
     all.push(entry);
-    localStorage.setItem(LS_KEY, JSON.stringify(all));
+    // prune anything older than the current hour so storage stays small
+    const bucket = currentHourBucket();
+    const kept = all.filter((e) => e.hourBucket >= bucket - 1);
+    localStorage.setItem(LS_KEY, JSON.stringify(kept));
   }
-  async top(round: number, n: number): Promise<Entry[]> {
-    return sortEntries(this.read().filter((e) => e.round === round)).slice(0, n);
+  async top(n: number): Promise<Entry[]> {
+    const bucket = currentHourBucket();
+    return sortEntries(this.read().filter((e) => e.hourBucket === bucket)).slice(0, n);
   }
 }
 
 export class SupabaseAdapter implements LeaderboardAdapter {
-  async currentRound(): Promise<number> {
-    const { data, error } = await supabase!.from("config").select("active_round").eq("id", 1).single();
-    if (error) throw new Error(error.message);
-    return (data as { active_round: number }).active_round;
-  }
-  async top(round: number, n: number): Promise<Entry[]> {
+  async top(n: number): Promise<Entry[]> {
+    const bucket = currentHourBucket();
     const { data, error } = await supabase!
       .from("scores_public")
-      .select("username, avatar_seed, score, correct, total_ms, round, created_at")
-      .eq("round", round)
+      .select("username, avatar_seed, score, correct, total_ms, hour_bucket, created_at")
+      .eq("hour_bucket", bucket)
       .order("score", { ascending: false })
       .order("total_ms", { ascending: true })
       .limit(n);
@@ -68,7 +74,7 @@ export class SupabaseAdapter implements LeaderboardAdapter {
       score: r.score as number,
       correct: r.correct as number,
       totalMs: r.total_ms as number,
-      round: r.round as number,
+      hourBucket: r.hour_bucket as number,
       createdAt: new Date(r.created_at as string).getTime(),
     }));
   }

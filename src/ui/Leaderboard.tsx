@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { selectAdapter, type Entry } from "../data/leaderboard";
+import { selectAdapter, msUntilNextHour, type Entry } from "../data/leaderboard";
 import { isSecureMode } from "../data/supabase";
 import Avatar from "./Avatar";
 
@@ -8,49 +8,54 @@ interface Props {
   highlightUser?: string;
 }
 
+function fmt(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, "0")}`;
+}
+
 export default function Leaderboard({ onBack, highlightUser }: Props) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
-  const [round, setRound] = useState<number>(1);
   const [error, setError] = useState<string | null>(null);
+  const [resetIn, setResetIn] = useState(msUntilNextHour());
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const adapter = selectAdapter();
-        const r = await adapter.currentRound();
-        const top = await adapter.top(r, 25);
-        if (!alive) return;
-        setRound(r);
-        setEntries(top);
+        const top = await selectAdapter().top(25);
+        if (alive) setEntries(top);
       } catch {
         if (alive) setError("Couldn't load the leaderboard.");
       }
     })();
+    const t = setInterval(() => setResetIn(msUntilNextHour()), 1000);
     return () => {
       alive = false;
+      clearInterval(t);
     };
   }, []);
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-display font-bold text-3xl text-ceramic">
-          🏆 Leaderboard <span className="text-white/40 text-lg">· Week {round}</span>
-        </h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="font-display font-bold text-3xl text-ceramic">🏆 Leaderboard</h2>
         <button className="text-teal hover:underline" onClick={onBack}>
           ← Back
         </button>
       </div>
 
-      <p className="text-xs text-white/40 mb-3">
-        {isSecureMode() ? "Global · server-verified scores" : "Local demo · this device only"}
-      </p>
+      <div className="flex items-center justify-between mb-4 text-xs">
+        <span className="text-white/40">
+          {isSecureMode() ? "Global · server-verified" : "Local demo · this device only"}
+        </span>
+        <span className="font-display text-amber">♻ resets in {fmt(resetIn)}</span>
+      </div>
 
       {error && <p className="text-bad">{error}</p>}
       {!entries && !error && <p className="text-white/50">Loading…</p>}
       {entries && entries.length === 0 && (
-        <p className="text-white/50">No racers yet — be the first!</p>
+        <p className="text-white/50">No racers this hour yet — be the first!</p>
       )}
 
       <ol className="space-y-2">

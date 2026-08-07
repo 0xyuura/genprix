@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  DEFAULT_QUESTIONS,
-  checkAnswer,
-  toPublic,
-  type PublicQuestion,
-  type Question,
-} from "./quiz";
-import { scoreAnswer } from "./scoring";
+import { checkAnswer, toPublic, type PublicQuestion, type Question } from "./quiz";
+import { scoreAnswer, HINTS_PER_SESSION } from "./scoring";
 import { sanitizeUsername, avatarSeed } from "./username";
 import { isSecureMode } from "../data/supabase";
-import { startRun, answerQuestion, finishRun } from "../data/backend";
-import { selectAdapter, sortEntries, type Entry } from "../data/leaderboard";
+import { answerQuestion, finishRun } from "../data/backend";
+import { joinRoomSecure, joinRoomLocal } from "../data/rooms";
+import { selectAdapter, sortEntries, currentHourBucket, type Entry } from "../data/leaderboard";
 import type { FxEvent } from "../race/RaceCanvas";
 
 export type Phase = "idle" | "playing" | "results";
@@ -39,6 +34,7 @@ export interface GameState {
   totalMs: number;
   secure: boolean;
   submitting: boolean;
+  hintsLeft: number;
 }
 
 const REVEAL_MS = 1700;
@@ -60,6 +56,7 @@ const initial: GameState = {
   totalMs: 0,
   secure: false,
   submitting: false,
+  hintsLeft: HINTS_PER_SESSION,
 };
 
 export function useGame() {
@@ -84,34 +81,32 @@ export function useGame() {
     revealTimer.current = null;
   };
 
-  const start = useCallback(async (rawName: string) => {
+  // Join the active room by code and start a run. Requires an active room (secure or local).
+  const join = useCallback(async (rawName: string, code: string) => {
     const username = sanitizeUsername(rawName);
     const seed = avatarSeed(username);
     clearRevealTimer();
     busy.current = false;
-    runStart.current = performance.now();
-    qStart.current = performance.now();
+    const secure = isSecureMode();
+    let current: PublicQuestion;
 
-    let secure = isSecureMode();
-    let current: PublicQuestion | null = null;
-    let notice: string | null = null;
-
-    if (secure) {
-      try {
-        const r = await startRun(username, seed);
+    try {
+      if (secure) {
+        const r = await joinRoomSecure(code, username, seed);
         runRef.current = { runId: r.run_id, token: r.token };
         current = r.question;
-      } catch {
-        secure = false;
-        notice = "Global board unavailable — playing a local demo run.";
+      } else {
+        const qs = joinRoomLocal(code); // throws if no room / wrong code
+        localQs.current = qs;
+        runRef.current = null;
+        current = toPublic(qs[0]);
       }
-    }
-    if (!secure) {
-      runRef.current = null;
-      localQs.current = DEFAULT_QUESTIONS;
-      current = toPublic(DEFAULT_QUESTIONS[0]);
+    } catch (e) {
+      setState((st) => ({ ...st, phase: "idle", notice: (e as Error).message || "Could not join room." }));
+      return;
     }
 
+    runStart.current = performance.now();
     qStart.current = performance.now();
     setState({
       ...initial,
@@ -120,7 +115,6 @@ export function useGame() {
       avatarSeed: seed,
       current,
       secure,
-      notice,
     });
   }, []);
 
@@ -151,11 +145,11 @@ export function useGame() {
             score: finalScore,
             correct: finalCorrect,
             totalMs,
-            round: 1,
+            hourBucket: currentHourBucket(),
             createdAt: Date.now(),
           };
           await adapter.submit(entry);
-          const board = sortEntries(await adapter.top(1, 9999));
+          const board = sortEntries(await adapter.top(9999));
           rank =
             board.filter(
               (e) => e.score > finalScore || (e.score === finalScore && e.totalMs < totalMs),
@@ -267,6 +261,13 @@ export function useGame() {
     [finish],
   );
 
+  // Session-wide hint budget (3 per game). Returns true if a hint was granted.
+  const useHint = useCallback((): boolean => {
+    if (stateRef.current.hintsLeft <= 0) return false;
+    setState((st) => (st.hintsLeft > 0 ? { ...st, hintsLeft: st.hintsLeft - 1 } : st));
+    return true;
+  }, []);
+
   const playAgain = useCallback(() => {
     clearRevealTimer();
     runRef.current = null;
@@ -276,5 +277,5 @@ export function useGame() {
 
   useEffect(() => clearRevealTimer, []);
 
-  return { state, start, submit, playAgain };
+  return { state, join, submit, playAgain, useHint };
 }

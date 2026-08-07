@@ -38,18 +38,21 @@ VITE_SUPABASE_ANON_KEY=YOUR-ANON-PUBLIC-KEY
 3. Restart `npm run dev`. A **"Global board"** badge on the start screen confirms
    secure mode is active.
 
-## 5. Publish the first week's questions
-1. Open **`/admin`** in the app (e.g. <http://localhost:5200/admin>).
+## 5. Host the first game
+1. Click the **🔒** button in the bottom-right corner (or open `/admin`).
 2. Enter the passcode `713962`. The editor pre-fills with the 10 default GenLayer
    questions.
-3. Edit if you like, then click **Save questions**.
+3. Edit if you like, then click **Create room & get code**.
+4. Share the code (or the invite link) with your community. They enter a username +
+   the code on the start screen to join.
 
-## Weekly reset (your routine)
-1. Go to **`/admin`**, enter the passcode.
-2. Edit the 10 questions for the new week.
-3. Click **Start new week** → this bumps the round: everyone immediately gets the
-   new questions and the leaderboard resets to a fresh season (old scores are kept,
-   archived under the previous round number).
+## Running games (your routine)
+- Each time you want to run a session: 🔒 → passcode → edit questions → **Create room &
+  get code** → share the code.
+- The global leaderboard **resets automatically at the top of every hour** — no manual
+  reset needed. A live "resets in mm:ss" countdown is shown on the leaderboard.
+- Players can only start when an active room exists, so you control exactly when the
+  quiz is open.
 
 ## Security notes
 - Correct answers and explanations are **never** sent to the browser in secure mode —

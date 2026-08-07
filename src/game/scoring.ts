@@ -1,6 +1,7 @@
 // Scoring model. Mirrored server-side in supabase.sql so secure-mode scores match.
 export const QUESTION_COUNT = 10;
-export const TIME_LIMIT_MS = 20_000;
+export const TIME_LIMIT_MS = 10_000;
+export const HINTS_PER_SESSION = 3;
 export const BASE_POINTS = 100;
 export const MAX_SPEED_BONUS = 100;
 export const STREAK_BONUS = 25;

@@ -72,9 +72,19 @@ create table if not exists scores (
   score       int  not null,
   correct     int  not null,
   total_ms    int  not null,
+  hour_bucket bigint not null default floor(extract(epoch from now()) / 3600),
   created_at  timestamptz not null default now()
 );
-create index if not exists scores_round_rank on scores (round, score desc, total_ms asc);
+-- Global leaderboard is bucketed by clock hour so it auto-resets every hour.
+create index if not exists scores_hour_rank on scores (hour_bucket, score desc, total_ms asc);
+
+-- Admin-created game rooms. The ACTIVE room is the newest one; its share code is
+-- how players join. Players cannot start a game unless an active room exists.
+create table if not exists rooms (
+  code       text primary key,
+  round      int  not null,
+  created_at timestamptz not null default now()
+);
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security: default-deny everywhere. Anon reads only via views/config.
@@ -85,6 +95,8 @@ alter table admin_attempts  enable row level security;
 alter table questions       enable row level security;
 alter table runs            enable row level security;
 alter table scores          enable row level security;
+alter table rooms           enable row level security;
+-- No anon policy on rooms => join/create/status go through RPCs only.
 
 -- Only config is directly readable by anon (just the active round number).
 drop policy if exists config_read on config;
@@ -98,7 +110,7 @@ create view questions_public as
 
 drop view if exists scores_public;
 create view scores_public as
-  select round, username, avatar_seed, score, correct, total_ms, created_at from scores;
+  select round, username, avatar_seed, score, correct, total_ms, hour_bucket, created_at from scores;
 
 grant select on questions_public to anon, authenticated;
 grant select on scores_public   to anon, authenticated;
@@ -194,6 +206,52 @@ begin
 end;
 $$;
 
+-- Is there an active room right now? (Players need one to start.) Never leaks the code.
+create or replace function get_active_room()
+returns jsonb language sql stable
+security definer set search_path = public, pg_temp as $$
+  select jsonb_build_object('open', exists (select 1 from rooms));
+$$;
+
+-- Join the active room by its shared code, then start a run for that room's questions.
+create or replace function join_room(p_code text, p_username text, p_avatar_seed text)
+returns jsonb language plpgsql
+security definer set search_path = public, pg_temp as $$
+declare
+  v_name   text;
+  v_active rooms%rowtype;
+  v_run    runs%rowtype;
+  v_q      questions%rowtype;
+begin
+  v_name := trim(coalesce(p_username, ''));
+  if length(v_name) < 2 or length(v_name) > 20 then
+    raise exception 'invalid username';
+  end if;
+
+  select * into v_active from rooms order by created_at desc limit 1;
+  if not found then raise exception 'no active room — ask the admin to open one'; end if;
+  if v_active.code <> upper(trim(coalesce(p_code, ''))) then
+    raise exception 'room not found or closed';
+  end if;
+  if not exists (select 1 from questions where round = v_active.round and order_idx = 0) then
+    raise exception 'room has no questions';
+  end if;
+
+  insert into runs (round, username, avatar_seed)
+  values (v_active.round, v_name, coalesce(p_avatar_seed, ''))
+  returning * into v_run;
+
+  select * into v_q from questions where round = v_active.round and order_idx = 0;
+
+  return jsonb_build_object(
+    'run_id', v_run.id,
+    'token',  v_run.token,
+    'index',  0,
+    'question', jsonb_build_object('id', v_q.qid, 'prompt', v_q.prompt, 'hint', v_q.hint)
+  );
+end;
+$$;
+
 create or replace function answer_question(p_run_id uuid, p_token uuid, p_question_id text, p_answer text)
 returns jsonb language plpgsql
 security definer set search_path = public, pg_temp as $$
@@ -206,8 +264,8 @@ declare
   v_speed   int;
   v_pts     int;
   v_streak  int;
-  v_limit   int := 20000;  -- ms, mirrors TIME_LIMIT_MS
-  v_grace   int := 25000;  -- ms, hard server timeout (limit + latency buffer)
+  v_limit   int := 10000;  -- ms, mirrors TIME_LIMIT_MS
+  v_grace   int := 13000;  -- ms, hard server timeout (limit + latency buffer)
 begin
   select * into v_run from runs where id = p_run_id and token = p_token for update;
   if not found then raise exception 'invalid run or token'; end if;
@@ -264,11 +322,12 @@ create or replace function finish_run(p_run_id uuid, p_token uuid)
 returns jsonb language plpgsql
 security definer set search_path = public, pg_temp as $$
 declare
-  v_run   runs%rowtype;
-  v_score int;
-  v_total int;
-  v_rank  int;
-  v_max   int := 3375;  -- MAX_SCORE_PER_ROUND anti-cheat clamp
+  v_run    runs%rowtype;
+  v_score  int;
+  v_total  int;
+  v_rank   int;
+  v_bucket bigint;
+  v_max    int := 3375;  -- MAX_SCORE_PER_ROUND anti-cheat clamp
 begin
   select * into v_run from runs where id = p_run_id and token = p_token for update;
   if not found then raise exception 'invalid run or token'; end if;
@@ -276,16 +335,19 @@ begin
   v_score := least(v_run.score, v_max);
 
   if not v_run.finished then
-    v_total := floor(extract(epoch from (now() - v_run.server_started_at)) * 1000)::int;
+    v_total  := floor(extract(epoch from (now() - v_run.server_started_at)) * 1000)::int;
+    v_bucket := floor(extract(epoch from now()) / 3600)::bigint;
     update runs set finished = true, finished_at = now() where id = v_run.id;
-    insert into scores (round, username, avatar_seed, score, correct, total_ms)
-    values (v_run.round, v_run.username, v_run.avatar_seed, v_score, v_run.correct, v_total);
+    insert into scores (round, username, avatar_seed, score, correct, total_ms, hour_bucket)
+    values (v_run.round, v_run.username, v_run.avatar_seed, v_score, v_run.correct, v_total, v_bucket);
   else
-    v_total := floor(extract(epoch from (v_run.finished_at - v_run.server_started_at)) * 1000)::int;
+    v_total  := floor(extract(epoch from (v_run.finished_at - v_run.server_started_at)) * 1000)::int;
+    v_bucket := floor(extract(epoch from v_run.finished_at) / 3600)::bigint;
   end if;
 
+  -- Rank within the current hour's global board.
   select count(*) + 1 into v_rank from scores
-  where round = v_run.round
+  where hour_bucket = v_bucket
     and (score > v_score or (score = v_score and total_ms < v_total));
 
   return jsonb_build_object(
@@ -366,6 +428,62 @@ begin
 end;
 $$;
 
+-- Admin: publish a set of questions AND open a new room, returning a shareable code.
+-- This becomes the active game; players join via join_room(code).
+create or replace function create_room(p_passcode text, p_questions jsonb)
+returns jsonb language plpgsql
+security definer set search_path = public, pg_temp as $$
+declare
+  v_round int;
+  v_len   int;
+  v_elem  jsonb;
+  v_i     int := 0;
+  v_code  text;
+  v_try   int := 0;
+begin
+  perform admin_verify(p_passcode);
+
+  if jsonb_typeof(p_questions) <> 'array' then raise exception 'questions must be an array'; end if;
+  v_len := jsonb_array_length(p_questions);
+  if v_len < 1 or v_len > 20 then raise exception 'questions must contain 1..20 items'; end if;
+  for v_elem in select * from jsonb_array_elements(p_questions) loop
+    if coalesce(v_elem->>'prompt', '') = '' then raise exception 'each question needs a prompt'; end if;
+    if coalesce(v_elem->>'explanation', '') = '' then raise exception 'each question needs an explanation'; end if;
+    if jsonb_typeof(v_elem->'accepted') <> 'array'
+       or jsonb_array_length(v_elem->'accepted') < 1 then
+      raise exception 'each question needs at least one accepted answer';
+    end if;
+  end loop;
+
+  select active_round + 1 into v_round from config where id = 1;
+  delete from questions where round = v_round;
+  for v_elem in select * from jsonb_array_elements(p_questions) loop
+    insert into questions (round, order_idx, qid, prompt, accepted, hint, explanation)
+    values (
+      v_round, v_i,
+      coalesce(nullif(v_elem->>'id', ''), 'q' || (v_i + 1)),
+      v_elem->>'prompt',
+      array(select jsonb_array_elements_text(v_elem->'accepted')),
+      nullif(v_elem->>'hint', ''),
+      v_elem->>'explanation'
+    );
+    v_i := v_i + 1;
+  end loop;
+  update config set active_round = v_round where id = 1;
+
+  -- unique 6-char code (hex, upper). Retry on the rare collision.
+  loop
+    v_code := upper(substr(md5(gen_random_uuid()::text), 1, 6));
+    exit when not exists (select 1 from rooms where code = v_code);
+    v_try := v_try + 1;
+    if v_try > 10 then raise exception 'could not allocate a room code'; end if;
+  end loop;
+  insert into rooms (code, round) values (v_code, v_round);
+
+  return jsonb_build_object('code', v_code, 'round', v_round);
+end;
+$$;
+
 create or replace function set_admin_passcode(p_current text, p_new text)
 returns jsonb language plpgsql
 security definer set search_path = public, pg_temp as $$
@@ -389,19 +507,25 @@ revoke all on function answer_matches(text, text[])     from public;
 revoke all on function admin_check_lockout()            from public;
 revoke all on function admin_verify(text)               from public;
 revoke all on function start_run(text, text)            from public;
+revoke all on function get_active_room()                from public;
+revoke all on function join_room(text, text, text)      from public;
 revoke all on function answer_question(uuid, uuid, text, text) from public;
 revoke all on function finish_run(uuid, uuid)           from public;
 revoke all on function admin_get_questions(text)        from public;
 revoke all on function admin_publish_questions(text, jsonb, boolean) from public;
+revoke all on function create_room(text, jsonb)         from public;
 revoke all on function set_admin_passcode(text, text)   from public;
 
-grant execute on function start_run(text, text)                        to anon, authenticated;
+grant execute on function get_active_room()                            to anon, authenticated;
+grant execute on function join_room(text, text, text)                  to anon, authenticated;
 grant execute on function answer_question(uuid, uuid, text, text)      to anon, authenticated;
 grant execute on function finish_run(uuid, uuid)                       to anon, authenticated;
 grant execute on function admin_get_questions(text)                    to anon, authenticated;
 grant execute on function admin_publish_questions(text, jsonb, boolean) to anon, authenticated;
+grant execute on function create_room(text, jsonb)                     to anon, authenticated;
 grant execute on function set_admin_passcode(text, text)               to anon, authenticated;
--- normalize_text / answer_matches / admin_check_lockout / admin_verify: internal only.
+-- start_run is NOT granted to anon: players must go through join_room (an active room
+-- is required). normalize_text / answer_matches / admin_* helpers: internal only.
 
 -- ============================================================================
 -- After running: seed the first round's questions from the app's /admin panel

@@ -1,18 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import RaceCanvas from "../race/RaceCanvas";
 import { isValidUsername } from "../game/username";
 import { isSecureMode } from "../data/supabase";
+import { isRoomOpen } from "../data/rooms";
 
 interface Props {
-  onStart: (username: string) => void;
+  onJoin: (username: string, code: string) => void;
   onShowLeaderboard: () => void;
   initialName?: string;
+  error?: string | null;
 }
 
-export default function StartScreen({ onStart, onShowLeaderboard, initialName = "" }: Props) {
+export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "", error }: Props) {
   const [name, setName] = useState(initialName);
-  const valid = isValidUsername(name);
+  const [code, setCode] = useState(
+    () => new URLSearchParams(window.location.search).get("room")?.toUpperCase() ?? "",
+  );
+  const [roomOpen, setRoomOpen] = useState<boolean | null>(null);
   const secure = isSecureMode();
+
+  useEffect(() => {
+    let alive = true;
+    isRoomOpen().then((o) => alive && setRoomOpen(o));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const valid = isValidUsername(name) && code.trim().length >= 4;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
@@ -31,34 +46,60 @@ export default function StartScreen({ onStart, onShowLeaderboard, initialName = 
         GenLayer <span className="text-magenta">Grand Prix</span>
       </h1>
       <p className="mt-2 text-white/70">
-        Answer 10 GenLayer questions. Every correct answer floors it — get your mochi kart to the
-        finish line and top the leaderboard. Faster + streaks = more points.
+        Enter the room code from the host, then answer 10 GenLayer questions — every correct
+        answer floors your mochi kart toward the finish. Fast + streaks score more.
       </p>
 
       <div className="mt-5 rounded-3xl overflow-hidden border border-white/10 aspect-[16/7]">
         <RaceCanvas correctCount={0} className="w-full h-full block" />
       </div>
 
-      <div className="mt-5 flex flex-col sm:flex-row gap-3">
-        <input
-          className="input-arcade"
-          placeholder="Enter a username (2–20 chars)"
-          value={name}
-          maxLength={24}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && valid && onStart(name)}
-          autoComplete="off"
-        />
-        <button className="btn-arcade whitespace-nowrap" disabled={!valid} onClick={() => onStart(name)}>
-          Start race 🏁
-        </button>
-      </div>
+      {roomOpen === false ? (
+        <div className="mt-5 panel p-5 text-center">
+          <p className="font-display text-lg text-amber">⏳ No active game right now</p>
+          <p className="text-white/60 text-sm mt-1">
+            The host hasn't opened a room yet. Ask the admin to create one, then enter the code
+            here.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-5 space-y-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              className="input-arcade sm:flex-1"
+              placeholder="Username (2–20 chars)"
+              value={name}
+              maxLength={24}
+              onChange={(e) => setName(e.target.value)}
+              autoComplete="off"
+            />
+            <input
+              className="input-arcade sm:w-48 uppercase tracking-widest"
+              placeholder="ROOM CODE"
+              value={code}
+              maxLength={8}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && valid && onJoin(name, code)}
+              autoComplete="off"
+            />
+          </div>
+          <button
+            className="btn-arcade w-full sm:w-auto"
+            disabled={!valid}
+            onClick={() => onJoin(name, code)}
+          >
+            Join race 🏁
+          </button>
+        </div>
+      )}
+
+      {error && <p className="mt-3 text-bad text-sm">{error}</p>}
 
       <div className="mt-4 flex items-center justify-between text-sm">
         <button className="text-teal hover:underline" onClick={onShowLeaderboard}>
           🏆 View leaderboard
         </button>
-        <span className="text-white/40">No wallet. No sign-up. Just vibes.</span>
+        <span className="text-white/40">No wallet. No sign-up. Just a code.</span>
       </div>
     </div>
   );

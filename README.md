@@ -13,11 +13,15 @@ leaderboard. Built for the GenLayer community.
   (case/punctuation-insensitive, accepts synonyms, tolerates a 1-char typo).
 - **Smash-Karts-style race** — Canvas side-scroller with the mochi kart, parallax
   GenLayer scenery, boost on correct, skid on wrong, checkpoints + finish flag.
-- **Speed + streak scoring** — 100 base + up to 100 speed bonus + 25×streak per question.
-- **Username only** — no wallet, no sign-up. Just type a name (auto mochi-color avatar).
-- **Weekly global leaderboard** — everyone competes on one board; each week is a season.
-- **Admin question editor** — passcode-protected `/admin` to swap the 10 questions and
-  reset the board every week.
+- **10-second timer** per question · **speed + streak scoring** (100 base + up to 100
+  speed + 25×streak) · **3 hints per game** (session-wide budget).
+- **Host a game with a room code** — the admin creates a room, gets a **share code**
+  (+ invite link), and players join with it. No active room = no game (full host control).
+- **Username only** — no wallet, no sign-up. Just a name + the room code (auto mochi avatar).
+- **Hourly global leaderboard** — one global board that **auto-resets every clock hour**
+  (a live "resets in mm:ss" countdown is shown).
+- **Admin panel** — a discreet 🔒 button in the bottom-right corner opens the passcode-gated
+  admin, where you input the questions/answers and create the room.
 - **Cheat-resistant** — in secure mode, answers never reach the browser and scores are
   computed and written server-side (see Security below).
 - **Share card** — export a 1600×900 PNG of your result for X.
@@ -31,8 +35,15 @@ npm test         # vitest unit tests
 npm run build    # typecheck + production build
 ```
 
-Out of the box it runs in **local/demo mode**: bundled questions, per-device leaderboard,
-client-side scoring. Great for trying it or taking screenshots.
+Out of the box it runs in **local/demo mode** (per-device, single machine). Because a game
+needs an active room, do this once to play locally:
+
+1. Click the **🔒** button (bottom-right) → enter passcode **713962**.
+2. Edit the 10 questions if you want, then **Create room & get code**.
+3. Go back, enter a username + the code, and race.
+
+(In local/demo mode the room + scores live in this browser only. Cross-device rooms and the
+global board need Supabase — see below.)
 
 ## Go live (global board + admin + anti-cheat)
 
@@ -45,9 +56,10 @@ Connect a free Supabase project (~5 min) — see **[SETUP.md](./SETUP.md)**. In 
 
 A **"Global board"** badge on the start screen confirms secure mode is on.
 
-### Weekly reset
-`/admin` → edit the 10 questions → **Start new week**. This bumps the round: everyone
-gets the new questions and the leaderboard resets to a fresh season.
+### Hosting a game
+🔒 (bottom-right) → passcode → edit the 10 questions → **Create room & get code**. Share the
+code / invite link. Players join and play those questions. The global leaderboard resets
+automatically at the top of every hour.
 
 ## Security
 

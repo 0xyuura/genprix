@@ -1,17 +1,23 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { sortEntries, LocalAdapter, type Entry } from "../data/leaderboard";
+import {
+  sortEntries,
+  LocalAdapter,
+  currentHourBucket,
+  msUntilNextHour,
+  HOUR_MS,
+  type Entry,
+} from "../data/leaderboard";
 
-const e = (u: string, score: number, totalMs: number, round = 1): Entry => ({
+const e = (u: string, score: number, totalMs: number, bucket = currentHourBucket()): Entry => ({
   username: u,
   avatarSeed: u,
   score,
   correct: 5,
   totalMs,
-  round,
+  hourBucket: bucket,
   createdAt: 0,
 });
 
-// Minimal in-memory localStorage for the node test environment.
 class MemStorage {
   private m = new Map<string, string>();
   getItem(k: string) {
@@ -36,25 +42,36 @@ describe("sortEntries", () => {
   });
 });
 
+describe("hour bucket helpers", () => {
+  it("currentHourBucket is a stable integer for the current hour", () => {
+    expect(currentHourBucket()).toBe(Math.floor(Date.now() / HOUR_MS));
+  });
+  it("msUntilNextHour is within (0, HOUR_MS]", () => {
+    const ms = msUntilNextHour();
+    expect(ms).toBeGreaterThan(0);
+    expect(ms).toBeLessThanOrEqual(HOUR_MS);
+  });
+});
+
 describe("LocalAdapter", () => {
-  it("submits and returns top entries for the round, sorted", async () => {
+  it("submits and returns top entries for the current hour, sorted", async () => {
     const a = new LocalAdapter();
     await a.submit(e("slow", 200, 9000));
     await a.submit(e("fast", 200, 4000));
     await a.submit(e("low", 100, 1000));
-    const top = await a.top(1, 10);
+    const top = await a.top(10);
     expect(top.map((x) => x.username)).toEqual(["fast", "slow", "low"]);
   });
-  it("filters by round", async () => {
+  it("hides entries from a previous hour (auto-reset)", async () => {
     const a = new LocalAdapter();
-    await a.submit(e("r1", 500, 1000, 1));
-    await a.submit(e("r2", 999, 1000, 2));
-    const top = await a.top(1, 10);
-    expect(top.map((x) => x.username)).toEqual(["r1"]);
+    await a.submit(e("thisHour", 500, 1000));
+    await a.submit(e("lastHour", 999, 1000, currentHourBucket() - 1));
+    const top = await a.top(10);
+    expect(top.map((x) => x.username)).toEqual(["thisHour"]);
   });
   it("respects the limit", async () => {
     const a = new LocalAdapter();
     for (let i = 0; i < 5; i++) await a.submit(e("u" + i, i * 10, 1000));
-    expect(await a.top(1, 3)).toHaveLength(3);
+    expect(await a.top(3)).toHaveLength(3);
   });
 });

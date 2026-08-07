@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { isSecureMode } from "../data/supabase";
-import { adminGetQuestions, adminPublish, type AdminQuestion } from "../data/backend";
+import { adminGetQuestions, type AdminQuestion } from "../data/backend";
+import { createRoomAny, localAdminUnlock } from "../data/rooms";
 import { DEFAULT_QUESTIONS } from "../game/quiz";
 
 interface Props {
   onBack: () => void;
 }
 
-const toAdmin = (): AdminQuestion[] =>
+const defaultQuestions = (): AdminQuestion[] =>
   DEFAULT_QUESTIONS.map((q) => ({
     id: q.id,
     prompt: q.prompt,
@@ -22,27 +23,17 @@ export default function AdminPanel({ onBack }: Props) {
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [code, setCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const secure = isSecureMode();
-
-  if (!secure) {
-    return (
-      <Shell onBack={onBack}>
-        <p className="text-amber">
-          Admin requires the shared backend. Configure Supabase (see <code>SETUP.md</code>) and set
-          <code> VITE_SUPABASE_URL</code> + <code>VITE_SUPABASE_ANON_KEY</code> to enable the weekly
-          question editor.
-        </p>
-      </Shell>
-    );
-  }
 
   const unlock = async () => {
     setBusy(true);
     setMsg(null);
     try {
-      const qs = await adminGetQuestions(passcode);
-      setQuestions(qs.length ? qs : toAdmin());
+      const qs = secure ? await adminGetQuestions(passcode) : localAdminUnlock(passcode);
+      setQuestions(qs.length ? qs : defaultQuestions());
       setUnlocked(true);
     } catch (e) {
       setMsg((e as Error).message || "Wrong passcode.");
@@ -54,23 +45,37 @@ export default function AdminPanel({ onBack }: Props) {
   const update = (i: number, patch: Partial<AdminQuestion>) =>
     setQuestions((qs) => qs.map((q, idx) => (idx === i ? { ...q, ...patch } : q)));
 
-  const publish = async (bump: boolean) => {
+  const create = async () => {
     setBusy(true);
     setMsg(null);
     try {
-      const res = await adminPublish(passcode, questions, bump);
-      setMsg(bump ? `✅ New week started — now on round ${res.round}.` : "✅ Questions saved.");
+      const r = await createRoomAny(passcode, questions);
+      setCode(r.code);
     } catch (e) {
-      setMsg((e as Error).message || "Publish failed.");
+      setMsg((e as Error).message || "Could not create room.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const shareLink = code ? `${window.location.origin}/?room=${code}` : "";
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
     }
   };
 
   if (!unlocked) {
     return (
       <Shell onBack={onBack}>
-        <h2 className="font-display font-bold text-2xl text-ceramic mb-3">Admin access</h2>
+        <h2 className="font-display font-bold text-2xl text-ceramic mb-1">Admin access</h2>
+        <p className="text-xs text-white/40 mb-3">
+          {secure ? "Secure mode · server-verified passcode" : "Local demo · passcode checked on this device"}
+        </p>
         <div className="flex gap-3">
           <input
             className="input-arcade"
@@ -91,22 +96,31 @@ export default function AdminPanel({ onBack }: Props) {
 
   return (
     <Shell onBack={onBack}>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-display font-bold text-2xl text-ceramic">Weekly questions</h2>
-        <div className="flex gap-2">
-          <button className="btn-arcade !py-2 !px-4 text-sm" onClick={() => publish(false)} disabled={busy}>
-            Save questions
-          </button>
-          <button
-            className="btn-arcade !py-2 !px-4 text-sm !bg-magenta !text-white"
-            onClick={() => publish(true)}
-            disabled={busy}
-          >
-            Start new week →
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="font-display font-bold text-2xl text-ceramic">Set up the game</h2>
+        <button
+          className="btn-arcade !py-2 !px-4 text-sm !bg-magenta !text-white"
+          onClick={create}
+          disabled={busy}
+        >
+          {busy ? "…" : "Create room & get code"}
+        </button>
+      </div>
+      <p className="text-xs text-white/40 mb-4">
+        Edit the 10 questions, then create a room. Players join with the code; the leaderboard
+        resets every hour automatically.
+      </p>
+
+      {code && (
+        <div className="panel p-5 mb-4 text-center animate-pop border-teal/40">
+          <p className="text-white/60 text-sm">Room is live! Share this code:</p>
+          <p className="font-display font-bold text-4xl tracking-[0.3em] text-teal my-2">{code}</p>
+          <button className="text-sm text-teal hover:underline" onClick={copy}>
+            {copied ? "✓ Link copied" : `Copy invite link (${shareLink})`}
           </button>
         </div>
-      </div>
-      {msg && <p className="mb-3 text-teal">{msg}</p>}
+      )}
+      {msg && <p className="mb-3 text-bad">{msg}</p>}
 
       <div className="space-y-4">
         {questions.map((q, i) => (
