@@ -7,4 +7,6 @@ dist-ssr
 .gstack
 .DS_Store
 *.log
-tsconfig.tsbuildinfo
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
