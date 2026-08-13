@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { BoardQuestion, LastResult } from "../game/useGame";
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
   onBack: () => void;
 }
 
-export default function QuestionPanel({
+function QuestionPanel({
   bq,
   index,
   hintsLeft,
@@ -111,3 +111,5 @@ export default function QuestionPanel({
     </div>
   );
 }
+
+export default memo(QuestionPanel);

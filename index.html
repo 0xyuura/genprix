@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -10,6 +10,10 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
+    <!-- The kart sprite is painted on the very first canvas frame; start it in
+         parallel with the JS bundle instead of after it. type= means browsers
+         without WebP skip this and let mascot.ts fall back to the PNG. -->
+    <link rel="preload" as="image" href="/brand/mochi-kart.webp" type="image/webp" />
     <title>GenLayer Grand Prix</title>
   </head>
   <body>

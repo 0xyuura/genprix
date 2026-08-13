@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { BoardQuestion } from "../game/useGame";
 
 interface Props {
@@ -7,7 +8,9 @@ interface Props {
 
 // The pick-any-order grid. Players choose which question to tackle; solved ones
 // are locked with a check, the rest are open to attempt in any order.
-export default function QuestionBoard({ board, onSelect }: Props) {
+// Memoised: the session clock re-renders App every second, and rebuilding ten
+// cards for a timer the board does not display is pure waste on low-end phones.
+function QuestionBoard({ board, onSelect }: Props) {
   return (
     <div className="panel p-4 sm:p-5">
       <p className="font-display font-bold text-lg text-ceramic mb-1">Pick a question</p>
@@ -49,3 +52,5 @@ export default function QuestionBoard({ board, onSelect }: Props) {
     </div>
   );
 }
+
+export default memo(QuestionBoard);

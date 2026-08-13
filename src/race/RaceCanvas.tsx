@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { loadMascot } from "../mascot";
+import { memo, useEffect, useRef } from "react";
+import { loadMascot, type MascotImage } from "../mascot";
 import { drawScene, easeProgress, type Fx, type Mood } from "./race";
 
 export interface FxEvent {
@@ -16,9 +16,9 @@ interface Props {
 
 // Canvas host: owns the rAF loop, eases progress toward correctCount/10, and fires
 // a transient boost/skid effect whenever fxEvent changes.
-export default function RaceCanvas({ correctCount, fxEvent, mood = "idle", className }: Props) {
+function RaceCanvas({ correctCount, fxEvent, mood = "idle", className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mascotRef = useRef<HTMLCanvasElement | null>(null);
+  const mascotRef = useRef<MascotImage | null>(null);
   const progressRef = useRef(0);
   const targetRef = useRef(0);
   const fxRef = useRef<Fx>("idle");
@@ -98,3 +98,5 @@ export default function RaceCanvas({ correctCount, fxEvent, mood = "idle", class
 
   return <canvas ref={canvasRef} className={className} />;
 }
+
+export default memo(RaceCanvas);

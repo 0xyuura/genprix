@@ -27,6 +27,18 @@ export interface LeaderboardAdapter {
   top(n: number): Promise<Entry[]>;
   /** Local-only: secure mode writes via finish_run and ignores this. */
   submit(entry: Entry): Promise<void>;
+  /**
+   * Placement of a finished run inside the current hour. Kept off `top()` on
+   * purpose: ranking used to pull the whole board down to the client, which is
+   * fine for one player and 1000x wasteful when a whole community finishes in
+   * the same hour.
+   */
+  rankFor(score: number, totalMs: number): Promise<number>;
+}
+
+/** A run beats another if it scored higher, or matched the score and got there faster. */
+export function beats(score: number, totalMs: number, e: Entry): boolean {
+  return e.score > score || (e.score === score && e.totalMs < totalMs);
 }
 
 export function sortEntries(entries: Entry[]): Entry[] {
@@ -55,6 +67,14 @@ export class LocalAdapter implements LeaderboardAdapter {
     const bucket = currentHourBucket();
     return sortEntries(this.read().filter((e) => e.hourBucket === bucket)).slice(0, n);
   }
+  async rankFor(score: number, totalMs: number): Promise<number> {
+    const bucket = currentHourBucket();
+    let ahead = 0;
+    for (const e of this.read()) {
+      if (e.hourBucket === bucket && beats(score, totalMs, e)) ahead++;
+    }
+    return ahead + 1;
+  }
 }
 
 export class SupabaseAdapter implements LeaderboardAdapter {
@@ -80,6 +100,18 @@ export class SupabaseAdapter implements LeaderboardAdapter {
   }
   async submit(): Promise<void> {
     // no-op: secure-mode scores are written server-side by finish_run.
+  }
+  async rankFor(score: number, totalMs: number): Promise<number> {
+    // head+count: Postgres answers with a number, not the board. One finisher
+    // costs one counted index scan instead of a full-bucket download.
+    const bucket = currentHourBucket();
+    const { count, error } = await supabase!
+      .from("scores_public")
+      .select("score", { count: "exact", head: true })
+      .eq("hour_bucket", bucket)
+      .or(`score.gt.${score},and(score.eq.${score},total_ms.lt.${totalMs})`);
+    if (error) throw new Error(error.message);
+    return (count ?? 0) + 1;
   }
 }
 

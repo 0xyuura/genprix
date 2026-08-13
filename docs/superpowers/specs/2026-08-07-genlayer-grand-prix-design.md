@@ -138,7 +138,7 @@ Interface: `{ top(round, n): Promise<Entry[]>; currentRound(): Promise<number> }
 - Weekly reset is automatic: the board filters to the active `round`; bumping the
   round yields a fresh board.
 
-## 11. Admin (`/admin`) — passcode `713962`, hardened
+## 11. Admin (`/admin`) — passcode `<ADMIN_PASSCODE>`, hardened
 
 - **Gate:** passcode validated **only** inside a Supabase `SECURITY DEFINER` RPC
   against a **bcrypt hash** (`pgcrypto crypt`/`gen_salt('bf')`). The passcode is
@@ -193,7 +193,7 @@ granted to `anon` only where noted:
   (first-set allowed via SQL when hash is null).
 
 **Bootstrap:** `SETUP.md` shows how to run the SQL and set the initial passcode hash
-to `713962` via `set_admin_passcode` (or a one-line seed INSERT using `crypt('713962', gen_salt('bf'))`).
+to `<ADMIN_PASSCODE>` via `set_admin_passcode` (or a one-line seed INSERT using `crypt('<ADMIN_PASSCODE>', gen_salt('bf'))`).
 
 ## 13. Security model & audit checklist
 
@@ -282,6 +282,6 @@ genlayer-grand-prix/
       backend.ts           # secure-mode RPC wrappers (start/answer/finish/admin)
       leaderboard.ts       # adapter interface + Local/Supabase impls
   supabase.sql             # schema + RLS + RPCs + bcrypt passcode + lockout
-  SETUP.md                 # Supabase 5-min guide + set passcode to 713962
+  SETUP.md                 # Supabase 5-min guide + set passcode to <ADMIN_PASSCODE>
   .env.example
 ```

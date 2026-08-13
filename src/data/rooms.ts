@@ -5,9 +5,16 @@ import { isSecureMode } from "./supabase";
 import { getActiveRoom, joinRoom, createRoom, type AdminQuestion } from "./backend";
 import { type Question } from "../game/quiz";
 
-// Local/demo admin passcode (obscurity-level only; secure mode validates a bcrypt hash
-// server-side). Matches the passcode the user set.
-export const LOCAL_ADMIN_PASSCODE = "713962";
+// Local/demo admin passcode. Set VITE_ADMIN_PASSCODE to override the demo default.
+//
+// This is obscurity only, and deliberately not committed: Vite inlines VITE_* vars into
+// the client bundle, so in local/demo mode ANY passcode here is readable by anyone who
+// opens devtools on the deployed site. Keeping it in an env var only keeps it out of the
+// public repo and git history. The real protection is secure mode, where the passcode
+// lives as a bcrypt hash in Postgres and is validated inside a SECURITY DEFINER RPC with
+// a 5-attempt/15-minute lockout — the browser never receives it at all.
+export const LOCAL_ADMIN_PASSCODE =
+  (import.meta.env.VITE_ADMIN_PASSCODE as string | undefined) || "000000";
 
 const LS_ROOM = "ggp_room_v1";
 

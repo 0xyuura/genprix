@@ -1,6 +1,7 @@
 // Pure canvas drawing for the side-scroll race. No React here so it stays testable
 // and the rAF loop in RaceCanvas can just call drawScene() each frame.
 import { BRAND, hexA } from "../brand";
+import type { MascotImage } from "../mascot";
 
 export type Fx = "idle" | "boost" | "skid";
 export type Mood = "idle" | "happy" | "angry";
@@ -12,7 +13,7 @@ export interface SceneState {
   fx: Fx;
   mood: Mood; // mochi's face: neutral / happy (correct) / angry (wrong)
   shake: number; // px magnitude
-  mascot: HTMLCanvasElement | null;
+  mascot: MascotImage | null;
   t: number; // seconds elapsed (for animation)
 }
 
@@ -170,7 +171,7 @@ function drawKart(
   x: number,
   y: number,
   scale: number,
-  mascot: HTMLCanvasElement | null,
+  mascot: MascotImage | null,
   fx: Fx,
   mood: Mood,
   t: number,

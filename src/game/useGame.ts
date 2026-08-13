@@ -4,7 +4,7 @@ import { runScore, SESSION_MS, HINTS_PER_SESSION, QUESTION_COUNT } from "./scori
 import { sanitizeUsername, avatarSeed } from "./username";
 import { isSecureMode } from "../data/supabase";
 import { joinRoomLocal } from "../data/rooms";
-import { selectAdapter, sortEntries, currentHourBucket, type Entry } from "../data/leaderboard";
+import { selectAdapter, currentHourBucket, type Entry } from "../data/leaderboard";
 import type { FxEvent } from "../race/RaceCanvas";
 import type { Mood } from "../race/race";
 
@@ -122,10 +122,7 @@ export function useGame() {
       };
       void adapter.submit(entry).then(async () => {
         try {
-          const board = sortEntries(await adapter.top(9999));
-          rank =
-            board.filter((e) => e.score > score || (e.score === score && e.totalMs < totalMs))
-              .length + 1;
+          rank = await adapter.rankFor(score, totalMs);
         } catch {
           /* ignore */
         }
@@ -271,12 +268,18 @@ export function useGame() {
     setState(initial);
   }, []);
 
-  // Session countdown: tick the display and end the run when time runs out.
+  // Session countdown. Polls 4x a second so the run ends promptly, but only pushes
+  // state when the *displayed* second changes — the clock reads mm:ss, so the other
+  // three ticks would re-render the whole tree to paint identical pixels.
   useEffect(() => {
     if (state.phase !== "playing") return;
     const id = setInterval(() => {
       const remMs = remaining();
-      setState((s) => (s.phase === "playing" ? { ...s, remainingMs: remMs } : s));
+      setState((s) => {
+        if (s.phase !== "playing") return s;
+        if (Math.ceil(remMs / 1000) === Math.ceil(s.remainingMs / 1000)) return s;
+        return { ...s, remainingMs: remMs };
+      });
       if (remMs <= 0) finish();
     }, 250);
     return () => clearInterval(id);

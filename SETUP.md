@@ -25,7 +25,7 @@ leaderboard). To turn on the **global leaderboard**, **cheat-resistant scoring**
 Run this once in the SQL editor (rotates later via the same function):
 
 ```sql
-select set_admin_passcode(null, '713962');
+select set_admin_passcode(null, '<ADMIN_PASSCODE>');
 ```
 
 > The passcode is stored **only** as a bcrypt hash in the private `admin_config`
@@ -47,7 +47,7 @@ VITE_SUPABASE_ANON_KEY=YOUR-ANON-PUBLIC-KEY
 
 ## 5. Host the first game
 1. Click the **🔒** button in the bottom-right corner (or open `/admin`).
-2. Enter the passcode `713962`. The editor pre-fills with the 10 default GenLayer
+2. Enter the passcode `<ADMIN_PASSCODE>`. The editor pre-fills with the 10 default GenLayer
    questions.
 3. Edit if you like, then click **Create room & get code**.
 4. Share the code (or the invite link) with your community. They enter a username +

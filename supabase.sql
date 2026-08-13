@@ -1,7 +1,7 @@
 -- ============================================================================
 -- GenLayer Grand Prix — Supabase schema, RLS, and server-authoritative RPCs.
 -- Paste this whole file into the Supabase SQL editor and run it once.
--- Then set the admin passcode:   select set_admin_passcode(null, '713962');
+-- Then set the admin passcode:   select set_admin_passcode(null, '<ADMIN_PASSCODE>');
 -- ============================================================================
 
 create extension if not exists pgcrypto;      -- crypt(), gen_salt(), gen_random_uuid()
@@ -530,5 +530,5 @@ grant execute on function set_admin_passcode(text, text)               to anon, 
 -- ============================================================================
 -- After running: seed the first round's questions from the app's /admin panel
 -- (paste them in and hit Save), or insert them manually. Then set the passcode:
---   select set_admin_passcode(null, '713962');
+--   select set_admin_passcode(null, '<ADMIN_PASSCODE>');
 -- ============================================================================

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   sortEntries,
+  beats,
   LocalAdapter,
   currentHourBucket,
   msUntilNextHour,
@@ -73,5 +74,50 @@ describe("LocalAdapter", () => {
     const a = new LocalAdapter();
     for (let i = 0; i < 5; i++) await a.submit(e("u" + i, i * 10, 1000));
     expect(await a.top(3)).toHaveLength(3);
+  });
+});
+
+describe("beats", () => {
+  it("a higher score wins", () => {
+    expect(beats(100, 5000, e("x", 200, 9000))).toBe(true);
+    expect(beats(200, 5000, e("x", 100, 1000))).toBe(false);
+  });
+  it("on a tied score the faster run wins", () => {
+    expect(beats(200, 9000, e("x", 200, 4000))).toBe(true);
+    expect(beats(200, 4000, e("x", 200, 9000))).toBe(false);
+  });
+  it("an identical run does not beat itself (ties keep the earlier rank)", () => {
+    expect(beats(200, 5000, e("x", 200, 5000))).toBe(false);
+  });
+});
+
+describe("LocalAdapter.rankFor", () => {
+  it("agrees with the position the sorted board would give", async () => {
+    const a = new LocalAdapter();
+    const rows: Array<[string, number, number]> = [
+      ["slow", 200, 9000],
+      ["fast", 200, 4000],
+      ["low", 100, 1000],
+      ["high", 900, 8000],
+    ];
+    for (const [u, s, t] of rows) await a.submit(e(u, s, t));
+
+    const board = await a.top(100);
+    for (const [u, s, t] of rows) {
+      const expected = board.findIndex((x) => x.username === u) + 1;
+      expect(await a.rankFor(s, t)).toBe(expected);
+    }
+  });
+  it("ranks a new best run first and a new worst run last", async () => {
+    const a = new LocalAdapter();
+    await a.submit(e("mid", 500, 5000));
+    await a.submit(e("other", 300, 5000));
+    expect(await a.rankFor(9999, 1000)).toBe(1);
+    expect(await a.rankFor(1, 60000)).toBe(3);
+  });
+  it("ignores runs from a previous hour", async () => {
+    const a = new LocalAdapter();
+    await a.submit(e("lastHour", 9999, 1000, currentHourBucket() - 1));
+    expect(await a.rankFor(100, 5000)).toBe(1);
   });
 });

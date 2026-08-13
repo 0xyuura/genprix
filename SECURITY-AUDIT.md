@@ -17,7 +17,7 @@ project after running `supabase.sql`.
 | A1 | Passcode never shipped to client | ✅ | Grep the built bundle — the passcode/hash never appear. It lives only in `admin_config.passcode_hash`, set via `set_admin_passcode`. |
 | A2 | Stored as bcrypt, not plaintext | ✅ | `set_admin_passcode` uses `crypt(p_new, gen_salt('bf'))`. Verify: `select passcode_hash from admin_config;` returns a `$2a$…` bcrypt string. |
 | A3 | `admin_config` unreadable by anon | ✅ 🔬 | RLS enabled, no anon policy. Verify with anon key: `select * from admin_config` → 0 rows / denied. |
-| A4 | Brute-force lockout | ✅ 🔬 | `admin_verify` calls `admin_check_lockout` (≥5 failures in 15 min → reject). Verify: call `admin_get_questions('000000')` 5×, then the correct `713962` is also rejected until the window passes. |
+| A4 | Brute-force lockout | ✅ 🔬 | `admin_verify` calls `admin_check_lockout` (≥5 failures in 15 min → reject). Verify: call `admin_get_questions('000000')` 5×, then the correct `<ADMIN_PASSCODE>` is also rejected until the window passes. |
 | A5 | Validation is server-side only | ✅ | The client only ever calls the RPC; it never compares the passcode locally in secure mode (`AdminPanel` gates on `isSecureMode()`; local mode disables admin entirely). |
 
 Brute-force math: 6-digit space = 1,000,000. With a 5-attempts/15-min global cap that's

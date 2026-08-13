@@ -18,7 +18,7 @@ genlayer-grand-prix/
   package.json, tsconfig.json, vite.config.ts, tailwind.config.js, postcss.config.js
   .env.example
   supabase.sql              # schema + RLS + RPCs + bcrypt passcode + lockout
-  SETUP.md                  # Supabase setup + set passcode 713962
+  SETUP.md                  # Supabase setup + set passcode <ADMIN_PASSCODE>
   public/brand/             # mascot-sheet.png, mark.png, mark-white.png, wordmark-white.png, favicon.svg
   src/
     main.tsx, App.tsx, index.css
@@ -399,7 +399,7 @@ describe('sortEntries', () => {
   - `admin_get_questions(passcode)`: lockout + verify → return active round questions **including** accepted (admin only).
   - `set_admin_passcode(current, new)`: allow if stored hash null; else verify current; store `crypt(new, gen_salt('bf'))`.
 - [ ] **Step 3:** `MAX_SCORE_PER_ROUND` sanity: with base 100, speed 100, streak 25×n for n=1..10 → 10*200 + 25*(1+..+10) = 2000 + 1375 = **3375**. Update the constant in scoring + SQL clamp to 3375. (Recompute in Step; do not trust this comment blindly — assert via the Task 3 test.)
-- [ ] **Step 4:** `SETUP.md`: create project → SQL editor → paste `supabase.sql` → run → `select set_admin_passcode(null, '713962');` → copy URL + anon key into `.env.local`. Note weekly flow: `/admin` → edit → Start new week.
+- [ ] **Step 4:** `SETUP.md`: create project → SQL editor → paste `supabase.sql` → run → `select set_admin_passcode(null, '<ADMIN_PASSCODE>');` → copy URL + anon key into `.env.local`. Note weekly flow: `/admin` → edit → Start new week.
 - [ ] **Step 5:** Commit `feat: supabase schema, RLS, server-authoritative RPCs, bcrypt admin`.
 
 ---
@@ -454,7 +454,7 @@ describe('sortEntries', () => {
 - [ ] **Step 2:** Anon cannot `insert into scores` directly (RLS denies); scores appear only via `finish_run`.
 - [ ] **Step 3:** `answer_question` rejects: bad token, wrong-order question id, replayed question, answer after server timeout.
 - [ ] **Step 4:** Spoof attempt: call `finish_run` / try to inflate score → impossible (server totals only; clamp to `MAX_SCORE_PER_ROUND`).
-- [ ] **Step 5:** Admin brute force: 5 wrong passcodes → 6th (even correct) locked out for the window. `713962` works before lockout.
+- [ ] **Step 5:** Admin brute force: 5 wrong passcodes → 6th (even correct) locked out for the window. `<ADMIN_PASSCODE>` works before lockout.
 - [ ] **Step 6:** Commit `docs: security audit results`.
 
 ### Task 15: Docs + memory
