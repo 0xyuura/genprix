@@ -29,6 +29,10 @@ faster scores higher. Built for the GenLayer community.
   "resets in mm:ss" countdown.
 - **Admin panel** — a discreet 🔒 button in the bottom-right corner opens the passcode-gated
   admin, where you input the questions/answers and create the room.
+- **Capture guard during a live round** — question text can't be selected, copied,
+  right-clicked or dragged, the copy/save/print shortcuts are swallowed, and the board
+  blurs the moment the page loses focus. The answer field stays fully editable. See the
+  honest limits in Security below.
 - **Cheat-resistant** — in secure mode, answers never reach the browser and scores are
   computed and written server-side (see Security below).
 - **Share card** — export a 1600×900 PNG of your result for X.
@@ -86,6 +90,18 @@ Local/demo mode is not secured (there's no shared board to cheat). **Secure mode
 - **Admin passcode** — stored as a **bcrypt hash** (never shipped to the client),
   validated only inside a `SECURITY DEFINER` RPC, with **rate-limit lockout** (5 failed
   attempts / 15 min) so a 6-digit code can't be brute-forced through the API.
+
+**Capture guard** (`src/game/useCaptureGuard.ts`), active only while a round is live:
+selection, copy/cut, context menu and drag are refused on question text; `Ctrl/Cmd`
++ `C/X/A/S/P/U` and the Firefox screenshot shortcut are swallowed; the questions blur on
+`blur`/`visibilitychange`; PrintScreen blurs and overwrites the clipboard. The answer
+field is exempt throughout, so players can still type, select and copy their own answer.
+
+> **A web page cannot block a screenshot.** The screen belongs to the OS — PrintScreen,
+> the Snipping Tool, `Cmd+Shift+4`, a phone's screenshot combo, or a second phone pointed
+> at the monitor all happen outside the browser's reach, and no web API can veto them.
+> The guard raises the effort; it does not make leaking impossible. Anything that must
+> actually be enforced has to be enforced server-side.
 
 > **The passcode is not a secret in local/demo mode.** Vite inlines every `VITE_*` var
 > into the client bundle, so `VITE_ADMIN_PASSCODE` is readable by anyone who opens

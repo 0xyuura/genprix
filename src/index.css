@@ -52,3 +52,22 @@ body {
   100% { transform: scale(1); opacity: 1; }
 }
 .animate-pop { animation: pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.3); }
+
+/* Question text during a live round — paired with useCaptureGuard.
+   Inputs opt back in so players can still edit their own answer. */
+.no-capture {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.no-capture input,
+.no-capture textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+/* Applied when the page loses focus/visibility, i.e. when a capture tool takes over. */
+.capture-masked {
+  filter: blur(16px);
+  pointer-events: none;
+}
+.capture-fade { transition: filter 120ms ease; }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useGame } from "./game/useGame";
+import { useCaptureGuard } from "./game/useCaptureGuard";
 import { QUESTION_COUNT } from "./game/scoring";
 import RaceCanvas from "./race/RaceCanvas";
 import StartScreen from "./ui/StartScreen";
@@ -22,6 +23,8 @@ function initialView(): View {
 export default function App() {
   const { state, join, select, backToBoard, submit, useHint, playAgain } = useGame();
   const [view, setView] = useState<View>(initialView);
+  // Only guard while a round is actually live — never on the start/results screens.
+  const { masked, warning } = useCaptureGuard(view === "game" && state.phase === "playing");
 
   useEffect(() => {
     const onPop = () => setView(initialView());
@@ -98,7 +101,10 @@ export default function App() {
           hintsLeft={state.hintsLeft}
         />
 
-        <div className="mt-4">
+        <div
+          className={`mt-4 no-capture capture-fade ${masked ? "capture-masked" : ""}`}
+          aria-hidden={masked}
+        >
           {openBq && state.selected != null ? (
             <QuestionPanel
               bq={openBq}
@@ -113,6 +119,20 @@ export default function App() {
             <QuestionBoard board={state.board} onSelect={select} />
           )}
         </div>
+
+        {masked && (
+          <p className="mt-3 text-center text-sm text-amber font-display">
+            🙈 Questions hidden while the page is out of focus
+          </p>
+        )}
+        {warning && (
+          <p
+            role="status"
+            className="mt-3 text-center text-sm text-bad font-display animate-pop"
+          >
+            {warning}
+          </p>
+        )}
       </div>
     );
   }

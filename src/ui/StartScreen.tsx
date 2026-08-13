@@ -33,13 +33,13 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
     <div className="mx-auto max-w-3xl px-4 py-6">
       <div className="flex items-center justify-between mb-4">
         <img src="/brand/wordmark-white.png" alt="GenLayer" className="h-6 opacity-90" />
-        <span
-          className={`text-xs font-display font-bold px-3 py-1 rounded-full ${
-            secure ? "bg-good/20 text-good" : "bg-amber/20 text-amber"
-          }`}
-        >
-          {secure ? "● Global board" : "● Local demo"}
-        </span>
+        {/* Only the secure-mode badge is worth showing players; the old "Local demo"
+            pill just advertised that the board wasn't real. */}
+        {secure && (
+          <span className="text-xs font-display font-bold px-3 py-1 rounded-full bg-good/20 text-good">
+            ● Global board
+          </span>
+        )}
       </div>
 
       <h1 className="font-display font-bold text-4xl sm:text-5xl text-ceramic leading-none">
