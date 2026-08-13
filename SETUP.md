@@ -1,5 +1,12 @@
 # GenLayer Grand Prix — Backend Setup (Secure Mode)
 
+> ⚠️ **Out of date as of the v3 game overhaul (2026-08-13).** The game now uses a
+> pick-any-order question board, one 10-minute session timer, 2 first/last-letter hints,
+> and time-bonus scoring — all currently computed **client-side (local mode only)**.
+> The RPCs in `supabase.sql` still implement the older per-question v2 model, so
+> **do not enable secure mode yet**: `join_room` / `answer_question` / `finish_run` need
+> to be ported to the v3 rules first. Until then the app runs in local/demo mode.
+
 The game works out of the box in **local/demo mode** (bundled questions, per-device
 leaderboard). To turn on the **global leaderboard**, **cheat-resistant scoring**, and the
 **weekly admin editor**, connect a free Supabase project — about 5 minutes.

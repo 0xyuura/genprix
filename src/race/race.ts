@@ -3,12 +3,14 @@
 import { BRAND, hexA } from "../brand";
 
 export type Fx = "idle" | "boost" | "skid";
+export type Mood = "idle" | "happy" | "angry";
 
 export interface SceneState {
   w: number;
   h: number;
   progress: number; // 0..1 (eased kart position from start to finish)
   fx: Fx;
+  mood: Mood; // mochi's face: neutral / happy (correct) / angry (wrong)
   shake: number; // px magnitude
   mascot: HTMLCanvasElement | null;
   t: number; // seconds elapsed (for animation)
@@ -42,7 +44,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, s: SceneState): void {
 
   const kartX = w * (KART_START + (KART_END - KART_START) * s.progress);
   const kartY = groundY + h * 0.06;
-  drawKart(ctx, kartX, kartY, h / 520, s.mascot, s.fx, t);
+  drawKart(ctx, kartX, kartY, h / 520, s.mascot, s.fx, s.mood, t);
 
   ctx.restore();
 }
@@ -170,12 +172,15 @@ function drawKart(
   scale: number,
   mascot: HTMLCanvasElement | null,
   fx: Fx,
+  mood: Mood,
   t: number,
 ) {
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(scale, scale);
-  if (fx === "skid") ctx.rotate(Math.sin(t * 40) * 0.05);
+  if (fx === "skid" || mood === "angry") ctx.rotate(Math.sin(t * 40) * 0.05);
+  // happy: a little celebratory hop
+  if (mood === "happy") ctx.translate(0, -Math.abs(Math.sin(t * 9)) * 10);
 
   // boost speed lines behind
   if (fx === "boost") {
@@ -260,15 +265,89 @@ function drawKart(
   ctx.fillRect(-72, -46, 12, 22);
   ctx.fillRect(-78, -50, 24, 8);
 
+  // mood aura glow behind the mochi
+  const headCx = 6;
+  const headCy = -96;
+  if (mood !== "idle") {
+    const aura = mood === "happy" ? BRAND.green : BRAND.magenta;
+    const gg = ctx.createRadialGradient(headCx, headCy, 4, headCx, headCy, 90);
+    gg.addColorStop(0, hexA(aura, 0.55));
+    gg.addColorStop(1, hexA(aura, 0));
+    ctx.fillStyle = gg;
+    ctx.beginPath();
+    ctx.arc(headCx, headCy, 90, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   // seat the mascot above the chassis
   if (mascot) {
     const mh = 96;
     const mw = mascot.width * (mh / mascot.height);
-    ctx.drawImage(mascot, -mw / 2 + 6, -34 - mh + 10, mw, mh);
+    ctx.drawImage(mascot, -mw / 2 + headCx, -34 - mh + 10, mw, mh);
   } else {
-    drawVectorMochi(ctx, 6, -46);
+    drawVectorMochi(ctx, headCx, -46);
   }
 
+  // facial expression overlaid on the mochi's head + a floating reaction
+  if (mood !== "idle") drawExpression(ctx, headCx, headCy - 6, mood, t);
+
+  ctx.restore();
+}
+
+// Overlays eyes + mouth on the mochi face and pops a reaction icon above the head.
+function drawExpression(ctx: CanvasRenderingContext2D, cx: number, cy: number, mood: Mood, t: number) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  const ink = mood === "happy" ? "#eafff4" : "#ffd7d7";
+  ctx.strokeStyle = ink;
+  ctx.fillStyle = ink;
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = "round";
+
+  if (mood === "happy") {
+    // ^ ^ eyes
+    for (const ex of [-13, 13]) {
+      ctx.beginPath();
+      ctx.moveTo(ex - 6, 2);
+      ctx.lineTo(ex, -6);
+      ctx.lineTo(ex + 6, 2);
+      ctx.stroke();
+    }
+    // big smile
+    ctx.beginPath();
+    ctx.arc(0, 6, 12, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.stroke();
+    // blush
+    ctx.fillStyle = hexA("#ff7ac0", 0.6);
+    for (const bx of [-22, 22]) {
+      ctx.beginPath();
+      ctx.ellipse(bx, 6, 5, 3.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    // angry: slanted brows + squinting eyes
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(s * 6, -10);
+      ctx.lineTo(s * 20, -3);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(s * 8, -1);
+      ctx.lineTo(s * 18, 3);
+      ctx.stroke();
+    }
+    // frown
+    ctx.beginPath();
+    ctx.arc(0, 18, 11, 1.15 * Math.PI, 1.85 * Math.PI);
+    ctx.stroke();
+  }
+
+  // floating reaction icon, bobbing
+  const bob = Math.sin(t * 6) * 3;
+  ctx.font = "28px system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(mood === "happy" ? "😄" : "😡", 34, -30 + bob);
   ctx.restore();
 }
 

@@ -1,281 +1,288 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { checkAnswer, toPublic, type PublicQuestion, type Question } from "./quiz";
-import { scoreAnswer, HINTS_PER_SESSION } from "./scoring";
+import { checkAnswer, maskAnswer, type Question } from "./quiz";
+import { runScore, SESSION_MS, HINTS_PER_SESSION, QUESTION_COUNT } from "./scoring";
 import { sanitizeUsername, avatarSeed } from "./username";
 import { isSecureMode } from "../data/supabase";
-import { answerQuestion, finishRun } from "../data/backend";
-import { joinRoomSecure, joinRoomLocal } from "../data/rooms";
+import { joinRoomLocal } from "../data/rooms";
 import { selectAdapter, sortEntries, currentHourBucket, type Entry } from "../data/leaderboard";
 import type { FxEvent } from "../race/RaceCanvas";
+import type { Mood } from "../race/race";
 
 export type Phase = "idle" | "playing" | "results";
+
+export interface BoardQuestion {
+  id: string;
+  prompt: string;
+  solved: boolean;
+  attempts: number;
+  hintMask: string | null; // revealed first/last-letter mask, once a hint is spent here
+}
 
 export interface LastResult {
   correct: boolean;
   correctAnswer: string;
   explanation: string;
-  points: number;
 }
 
 export interface GameState {
   phase: Phase;
   username: string;
   avatarSeed: string;
-  index: number; // 0-based current question
-  score: number;
-  correctCount: number;
-  streak: number;
-  current: PublicQuestion | null;
-  reveal: boolean;
-  lastResult: LastResult | null;
+  board: BoardQuestion[];
+  selected: number | null; // open question index; null = the question board
+  solvedCount: number;
+  score: number; // running base score (solved × 100); final run adds the time bonus
+  hintsLeft: number;
+  mood: Mood;
+  lastResult: LastResult | null; // feedback for the currently open question
   fxEvent: FxEvent | null;
+  remainingMs: number;
   notice: string | null;
   rank: number | null;
   totalMs: number;
   secure: boolean;
-  submitting: boolean;
-  hintsLeft: number;
 }
 
-const REVEAL_MS = 1700;
+const MOOD_MS = 1500; // how long the happy/angry face lingers
+const SOLVED_RETURN_MS = 1100; // pause on the solved card before returning to the board
 
 const initial: GameState = {
   phase: "idle",
   username: "",
   avatarSeed: "",
-  index: 0,
+  board: [],
+  selected: null,
+  solvedCount: 0,
   score: 0,
-  correctCount: 0,
-  streak: 0,
-  current: null,
-  reveal: false,
+  hintsLeft: HINTS_PER_SESSION,
+  mood: "idle",
   lastResult: null,
   fxEvent: null,
+  remainingMs: SESSION_MS,
   notice: null,
   rank: null,
   totalMs: 0,
   secure: false,
-  submitting: false,
-  hintsLeft: HINTS_PER_SESSION,
 };
 
 export function useGame() {
   const [state, setState] = useState<GameState>(initial);
 
-  // Effect-synced mirror so user-triggered async callbacks read committed state.
+  // Effect-synced mirror so async/user-triggered callbacks read committed state.
   const stateRef = useRef(state);
   useEffect(() => {
     stateRef.current = state;
   });
 
-  const runRef = useRef<{ runId: string; token: string } | null>(null);
   const localQs = useRef<Question[]>([]);
-  const qStart = useRef(0);
-  const runStart = useRef(0);
-  const busy = useRef(false);
+  const endsAt = useRef(0);
   const fxId = useRef(0);
-  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const moodTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const returnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finished = useRef(false);
 
-  const clearRevealTimer = () => {
-    if (revealTimer.current) clearTimeout(revealTimer.current);
-    revealTimer.current = null;
+  const clearTimers = () => {
+    if (moodTimer.current) clearTimeout(moodTimer.current);
+    if (returnTimer.current) clearTimeout(returnTimer.current);
+    moodTimer.current = null;
+    returnTimer.current = null;
   };
 
-  // Join the active room by code and start a run. Requires an active room (secure or local).
-  const join = useCallback(async (rawName: string, code: string) => {
-    const username = sanitizeUsername(rawName);
-    const seed = avatarSeed(username);
-    clearRevealTimer();
-    busy.current = false;
-    const secure = isSecureMode();
-    let current: PublicQuestion;
+  const setMood = (mood: Mood) => {
+    if (moodTimer.current) clearTimeout(moodTimer.current);
+    setState((s) => ({ ...s, mood }));
+    if (mood !== "idle") {
+      moodTimer.current = setTimeout(() => setState((s) => ({ ...s, mood: "idle" })), MOOD_MS);
+    }
+  };
 
+  const remaining = () => Math.max(0, endsAt.current - performance.now());
+
+  const finish = useCallback(() => {
+    if (finished.current) return;
+    finished.current = true;
+    clearTimers();
+
+    const s = stateRef.current;
+    const remMs = remaining();
+    const score = runScore(s.solvedCount, remMs);
+    const totalMs = SESSION_MS - remMs;
+
+    let rank: number | null = null;
     try {
-      if (secure) {
-        const r = await joinRoomSecure(code, username, seed);
-        runRef.current = { runId: r.run_id, token: r.token };
-        current = r.question;
-      } else {
-        const qs = joinRoomLocal(code); // throws if no room / wrong code
-        localQs.current = qs;
-        runRef.current = null;
-        current = toPublic(qs[0]);
-      }
-    } catch (e) {
-      setState((st) => ({ ...st, phase: "idle", notice: (e as Error).message || "Could not join room." }));
-      return;
+      const adapter = selectAdapter();
+      const entry: Entry = {
+        username: s.username,
+        avatarSeed: s.avatarSeed,
+        score,
+        correct: s.solvedCount,
+        totalMs,
+        hourBucket: currentHourBucket(),
+        createdAt: Date.now(),
+      };
+      void adapter.submit(entry).then(async () => {
+        try {
+          const board = sortEntries(await adapter.top(9999));
+          rank =
+            board.filter((e) => e.score > score || (e.score === score && e.totalMs < totalMs))
+              .length + 1;
+        } catch {
+          /* ignore */
+        }
+        setState((st) => ({ ...st, rank }));
+      });
+    } catch {
+      /* ignore */
     }
 
-    runStart.current = performance.now();
-    qStart.current = performance.now();
+    setState((st) => ({
+      ...st,
+      phase: "results",
+      mood: "idle",
+      score,
+      totalMs,
+      remainingMs: remMs,
+      rank,
+    }));
+  }, []);
+
+  // Join the active local room by code and open a fresh 10-minute session.
+  const join = useCallback((rawName: string, code: string) => {
+    const username = sanitizeUsername(rawName);
+    const seed = avatarSeed(username);
+    clearTimers();
+    finished.current = false;
+    const secure = isSecureMode();
+
+    let qs: Question[];
+    try {
+      qs = joinRoomLocal(code); // throws if no room / wrong code
+    } catch (e) {
+      setState((st) => ({
+        ...st,
+        phase: "idle",
+        notice: (e as Error).message || "Could not join room.",
+      }));
+      return;
+    }
+    localQs.current = qs;
+    endsAt.current = performance.now() + SESSION_MS;
+
     setState({
       ...initial,
       phase: "playing",
       username,
       avatarSeed: seed,
-      current,
       secure,
+      remainingMs: SESSION_MS,
+      board: qs.map((q) => ({
+        id: q.id,
+        prompt: q.prompt,
+        solved: false,
+        attempts: 0,
+        hintMask: null,
+      })),
     });
   }, []);
 
-  const finish = useCallback(
-    async (finalScore: number, finalCorrect: number, username: string, seed: string) => {
-      const totalMs = Math.round(performance.now() - runStart.current);
-      let rank: number | null = null;
-      let resolvedScore = finalScore;
-      let resolvedCorrect = finalCorrect;
-      let resolvedTotal = totalMs;
+  const select = useCallback((i: number) => {
+    setState((s) => {
+      if (s.phase !== "playing" || i < 0 || i >= s.board.length) return s;
+      return { ...s, selected: i, lastResult: null, mood: "idle" };
+    });
+  }, []);
 
-      if (runRef.current && isSecureMode()) {
-        try {
-          const f = await finishRun(runRef.current.runId, runRef.current.token);
-          resolvedScore = f.score;
-          resolvedCorrect = f.correct;
-          resolvedTotal = f.total_ms;
-          rank = f.rank;
-        } catch {
-          /* keep client values; rank stays null */
-        }
-      } else {
-        try {
-          const adapter = selectAdapter();
-          const entry: Entry = {
-            username,
-            avatarSeed: seed,
-            score: finalScore,
-            correct: finalCorrect,
-            totalMs,
-            hourBucket: currentHourBucket(),
-            createdAt: Date.now(),
-          };
-          await adapter.submit(entry);
-          const board = sortEntries(await adapter.top(9999));
-          rank =
-            board.filter(
-              (e) => e.score > finalScore || (e.score === finalScore && e.totalMs < totalMs),
-            ).length + 1;
-        } catch {
-          /* ignore */
-        }
-      }
-
-      setState((s) => ({
-        ...s,
-        phase: "results",
-        score: resolvedScore,
-        correctCount: resolvedCorrect,
-        totalMs: resolvedTotal,
-        rank,
-      }));
-    },
-    [],
-  );
+  const backToBoard = useCallback(() => {
+    if (returnTimer.current) clearTimeout(returnTimer.current);
+    setState((s) => ({ ...s, selected: null, lastResult: null }));
+  }, []);
 
   const submit = useCallback(
-    async (answer: string) => {
-      if (busy.current) return;
+    (answer: string) => {
       const s = stateRef.current;
-      if (s.phase !== "playing" || s.reveal || !s.current) return;
-      busy.current = true;
-      const elapsedMs = Math.round(performance.now() - qStart.current);
-      setState((st) => ({ ...st, submitting: true }));
+      if (s.phase !== "playing" || s.selected == null) return;
+      const idx = s.selected;
+      const bq = s.board[idx];
+      if (!bq || bq.solved) return;
+      if (!answer.trim()) return;
 
-      let correct: boolean;
-      let points: number;
-      let correctAnswer: string;
-      let explanation: string;
-      let newScore: number;
-      let newCorrect: number;
-      let newStreak: number;
-      let next: PublicQuestion | null;
-      let lastQuestion: boolean;
-
-      if (s.secure && runRef.current) {
-        try {
-          const res = await answerQuestion(
-            runRef.current.runId,
-            runRef.current.token,
-            s.current.id,
-            answer,
-          );
-          correct = res.correct;
-          points = res.points_awarded;
-          correctAnswer = res.correct_answer;
-          explanation = res.explanation;
-          newScore = res.new_score;
-          newCorrect = res.correct_count;
-          newStreak = correct ? s.streak + 1 : 0;
-          next = res.next_question;
-          lastQuestion = res.next_question === null;
-        } catch {
-          busy.current = false;
-          setState((st) => ({ ...st, submitting: false, notice: "Network hiccup — try again." }));
-          return;
-        }
-      } else {
-        const q = localQs.current[s.index];
-        correct = checkAnswer(answer, q.accepted);
-        const sc = scoreAnswer({ correct, elapsedMs, streak: s.streak });
-        points = sc.points;
-        newStreak = sc.newStreak;
-        correctAnswer = q.accepted[0];
-        explanation = q.explanation;
-        newScore = s.score + points;
-        newCorrect = s.correctCount + (correct ? 1 : 0);
-        const nextIdx = s.index + 1;
-        lastQuestion = nextIdx >= localQs.current.length;
-        next = lastQuestion ? null : toPublic(localQs.current[nextIdx]);
-      }
+      const q = localQs.current[idx];
+      const correct = checkAnswer(answer, q.accepted);
 
       fxId.current += 1;
       const fxEvent: FxEvent = { id: fxId.current, type: correct ? "boost" : "skid" };
 
-      setState((st) => ({
-        ...st,
-        submitting: false,
-        reveal: true,
-        lastResult: { correct, correctAnswer, explanation, points },
-        score: newScore,
-        correctCount: newCorrect,
-        streak: newStreak,
-        fxEvent,
-      }));
+      if (correct) {
+        const newSolved = s.solvedCount + 1;
+        const board = s.board.map((b, i) => (i === idx ? { ...b, solved: true } : b));
+        setState((st) => ({
+          ...st,
+          board,
+          solvedCount: newSolved,
+          score: newSolved * 100,
+          fxEvent,
+          lastResult: { correct: true, correctAnswer: q.accepted[0], explanation: q.explanation },
+        }));
+        setMood("happy");
 
-      clearRevealTimer();
-      revealTimer.current = setTimeout(() => {
-        busy.current = false;
-        if (lastQuestion) {
-          finish(newScore, newCorrect, s.username, s.avatarSeed);
+        if (returnTimer.current) clearTimeout(returnTimer.current);
+        if (newSolved >= QUESTION_COUNT) {
+          returnTimer.current = setTimeout(finish, SOLVED_RETURN_MS);
         } else {
-          qStart.current = performance.now();
-          setState((st) => ({
-            ...st,
-            index: st.index + 1,
-            current: next,
-            reveal: false,
-            lastResult: null,
-          }));
+          returnTimer.current = setTimeout(
+            () => setState((st) => ({ ...st, selected: null, lastResult: null })),
+            SOLVED_RETURN_MS,
+          );
         }
-      }, REVEAL_MS);
+      } else {
+        const board = s.board.map((b, i) => (i === idx ? { ...b, attempts: b.attempts + 1 } : b));
+        setState((st) => ({
+          ...st,
+          board,
+          fxEvent,
+          lastResult: { correct: false, correctAnswer: "", explanation: "" },
+        }));
+        setMood("angry");
+      }
     },
     [finish],
   );
 
-  // Session-wide hint budget (3 per game). Returns true if a hint was granted.
-  const useHint = useCallback((): boolean => {
-    if (stateRef.current.hintsLeft <= 0) return false;
-    setState((st) => (st.hintsLeft > 0 ? { ...st, hintsLeft: st.hintsLeft - 1 } : st));
-    return true;
+  // Spend one of the 2 session hints to reveal the first/last-letter mask for a question.
+  const useHint = useCallback((i: number): boolean => {
+    let granted = false;
+    setState((s) => {
+      if (s.phase !== "playing") return s;
+      const bq = s.board[i];
+      if (!bq || bq.solved) return s;
+      if (bq.hintMask) return s; // already revealed here, no charge
+      if (s.hintsLeft <= 0) return s;
+      granted = true;
+      const mask = maskAnswer(localQs.current[i].accepted[0]);
+      const board = s.board.map((b, idx) => (idx === i ? { ...b, hintMask: mask } : b));
+      return { ...s, board, hintsLeft: s.hintsLeft - 1 };
+    });
+    return granted;
   }, []);
 
   const playAgain = useCallback(() => {
-    clearRevealTimer();
-    runRef.current = null;
-    busy.current = false;
+    clearTimers();
+    finished.current = false;
     setState(initial);
   }, []);
 
-  useEffect(() => clearRevealTimer, []);
+  // Session countdown: tick the display and end the run when time runs out.
+  useEffect(() => {
+    if (state.phase !== "playing") return;
+    const id = setInterval(() => {
+      const remMs = remaining();
+      setState((s) => (s.phase === "playing" ? { ...s, remainingMs: remMs } : s));
+      if (remMs <= 0) finish();
+    }, 250);
+    return () => clearInterval(id);
+  }, [state.phase, finish]);
 
-  return { state, join, submit, playAgain, useHint };
+  useEffect(() => clearTimers, []);
+
+  return { state, join, select, backToBoard, submit, useHint, playAgain };
 }

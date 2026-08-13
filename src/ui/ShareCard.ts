@@ -20,7 +20,7 @@ export async function downloadShareCard(data: ShareData): Promise<void> {
   const ctx = canvas.getContext("2d")!;
 
   const mascot = await loadMascot();
-  drawScene(ctx, { w: W, h: H, progress: 1, fx: "boost", shake: 0, mascot, t: 0.2 });
+  drawScene(ctx, { w: W, h: H, progress: 1, fx: "boost", mood: "happy", shake: 0, mascot, t: 0.2 });
 
   // dark scrim for legibility
   ctx.fillStyle = hexA("#000000", 0.42);

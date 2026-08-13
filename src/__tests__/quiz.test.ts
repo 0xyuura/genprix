@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalize, checkAnswer, DEFAULT_QUESTIONS } from "../game/quiz";
+import { normalize, checkAnswer, maskAnswer, DEFAULT_QUESTIONS } from "../game/quiz";
 
 describe("normalize", () => {
   it("lowercases, trims, strips punctuation, collapses spaces", () => {
@@ -31,6 +31,24 @@ describe("checkAnswer", () => {
     // 'gen' vs 'den' would be Levenshtein 1 but must NOT match (len < 4 guard)
     expect(checkAnswer("den", ["gen"])).toBe(false);
     expect(checkAnswer("gen", ["gen"])).toBe(true);
+  });
+});
+
+describe("maskAnswer", () => {
+  const revealed = (s: string) => maskAnswer(s).replace(/[_ ]/g, "");
+  it("reveals only the first and last letter", () => {
+    expect(maskAnswer("python")).toBe("p _ _ _ _ n");
+    expect(revealed("python")).toBe("pn");
+  });
+  it("keeps very short answers mostly intact", () => {
+    expect(maskAnswer("gen")).toBe("g _ n");
+  });
+  it("masks interior letters of multi-word answers, keeping word breaks", () => {
+    const m = maskAnswer("optimistic democracy");
+    expect(m.startsWith("o ")).toBe(true);
+    expect(m.endsWith(" y")).toBe(true);
+    expect(revealed("optimistic democracy")).toBe("oy"); // only global first/last shown
+    expect(m).toMatch(/\S {3}\S/); // a 3-space gap marks the word boundary
   });
 });
 

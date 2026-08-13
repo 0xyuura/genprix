@@ -11,7 +11,7 @@ interface Props {
 
 export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }: Props) {
   const [sharing, setSharing] = useState(false);
-  const perfect = state.correctCount === 10;
+  const perfect = state.solvedCount === 10;
 
   const share = async () => {
     setSharing(true);
@@ -19,7 +19,7 @@ export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }:
       await downloadShareCard({
         username: state.username,
         score: state.score,
-        correct: state.correctCount,
+        correct: state.solvedCount,
         totalMs: state.totalMs,
         rank: state.rank,
       });
@@ -37,7 +37,7 @@ export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }:
       <p className="text-white/60">
         {perfect
           ? "You crossed the finish line — a true GenLayer maxi."
-          : `Your mochi reached checkpoint ${state.correctCount}/10.`}
+          : `Your mochi reached checkpoint ${state.solvedCount}/10.`}
       </p>
 
       <div className="mt-6 panel p-6">
@@ -47,7 +47,7 @@ export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }:
         <div className="text-white/50">points</div>
 
         <div className="mt-5 grid grid-cols-3 gap-3 text-center">
-          <Stat label="Correct" value={`${state.correctCount}/10`} />
+          <Stat label="Correct" value={`${state.solvedCount}/10`} />
           <Stat label="Time" value={`${(state.totalMs / 1000).toFixed(1)}s`} />
           <Stat label="Rank" value={state.rank ? `#${state.rank}` : "—"} />
         </div>

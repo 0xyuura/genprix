@@ -1,39 +1,44 @@
 import { describe, it, expect } from "vitest";
 import {
-  scoreAnswer,
-  MAX_SCORE_PER_ROUND,
-  TIME_LIMIT_MS,
+  runScore,
+  formatClock,
+  MAX_SCORE,
+  SESSION_MS,
   QUESTION_COUNT,
+  POINTS_PER_CORRECT,
 } from "../game/scoring";
 
-describe("scoreAnswer", () => {
-  it("wrong answer scores 0 and resets streak", () => {
-    expect(scoreAnswer({ correct: false, elapsedMs: 1000, streak: 3 })).toEqual({
-      points: 0,
-      newStreak: 0,
-    });
+describe("runScore", () => {
+  it("is just the base when no time is left", () => {
+    expect(runScore(4, 0)).toBe(4 * POINTS_PER_CORRECT);
   });
-  it("correct with full time gives base + full speed + streak bonus", () => {
-    expect(scoreAnswer({ correct: true, elapsedMs: 0, streak: 0 })).toEqual({
-      points: 100 + 100 + 25,
-      newStreak: 1,
-    });
+  it("zero solved scores zero regardless of time left", () => {
+    expect(runScore(0, SESSION_MS)).toBe(0);
   });
-  it("correct at timeout gives base + 0 speed + streak", () => {
-    expect(scoreAnswer({ correct: true, elapsedMs: TIME_LIMIT_MS, streak: 1 })).toEqual({
-      points: 100 + 0 + 50,
-      newStreak: 2,
-    });
+  it("adds a time bonus scaled by the fraction solved", () => {
+    // 10 solved, full time left → base + secsLeft*5*1.0
+    const secs = Math.floor(SESSION_MS / 1000);
+    expect(runScore(QUESTION_COUNT, SESSION_MS)).toBe(
+      QUESTION_COUNT * POINTS_PER_CORRECT + secs * 5,
+    );
   });
-  it("MAX_SCORE_PER_ROUND matches a perfect fast run and equals 3375", () => {
-    let total = 0;
-    let streak = 0;
-    for (let i = 0; i < QUESTION_COUNT; i++) {
-      const r = scoreAnswer({ correct: true, elapsedMs: 0, streak });
-      total += r.points;
-      streak = r.newStreak;
-    }
-    expect(total).toBe(MAX_SCORE_PER_ROUND);
-    expect(MAX_SCORE_PER_ROUND).toBe(3375);
+  it("a fast full run beats an early quit with fewer correct", () => {
+    const fullFast = runScore(10, SESSION_MS * 0.5); // 10/10 with 5 min left
+    const earlyQuit = runScore(3, SESSION_MS * 0.9); // 3/10 with 9 min left
+    expect(fullFast).toBeGreaterThan(earlyQuit);
+  });
+  it("MAX_SCORE is a perfect instant run", () => {
+    expect(MAX_SCORE).toBe(runScore(QUESTION_COUNT, SESSION_MS));
+  });
+});
+
+describe("formatClock", () => {
+  it("formats mm:ss", () => {
+    expect(formatClock(600_000)).toBe("10:00");
+    expect(formatClock(65_000)).toBe("1:05");
+    expect(formatClock(9_000)).toBe("0:09");
+  });
+  it("clamps negatives to 0:00", () => {
+    expect(formatClock(-500)).toBe("0:00");
   });
 });

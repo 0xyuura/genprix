@@ -1,25 +1,32 @@
 # 🏁 GenLayer Grand Prix
 
-A GenLayer-branded quiz-racer. Answer 10 GenLayer trivia questions by typing — every
-**correct** answer floors it and the mochi mascot's kart races one checkpoint closer to
-the finish line. Faster answers and streaks score more. Compete on a weekly global
-leaderboard. Built for the GenLayer community.
+A GenLayer-branded quiz-racer. Pick any of 10 GenLayer trivia questions, in any order, and
+type your answer — every **correct** one floors it and the mochi mascot's kart races one
+checkpoint closer to the finish line. You get **10 minutes** for the whole quiz; finishing
+faster scores higher. Built for the GenLayer community.
 
 ![start screen](docs/screenshot-start.png)
 
 ## Features
 
+- **Pick-your-own-order question board** — all 10 questions are shown up front; play them
+  in whatever order you like, and retry a question as many times as you want.
 - **Type-to-answer quiz** — 10 fact-checked GenLayer questions, smart answer matching
   (case/punctuation-insensitive, accepts synonyms, tolerates a 1-char typo).
 - **Smash-Karts-style race** — Canvas side-scroller with the mochi kart, parallax
   GenLayer scenery, boost on correct, skid on wrong, checkpoints + finish flag.
-- **10-second timer** per question · **speed + streak scoring** (100 base + up to 100
-  speed + 25×streak) · **3 hints per game** (session-wide budget).
+- **Mochi reacts** — the mascot's face turns **happy** 😄 on a correct answer and
+  **angry** 😡 on a wrong one (aura, hop, and expression drawn on the canvas).
+- **10-minute session timer** for the whole quiz · score = 100 per correct answer +
+  a remaining-time bonus (5/sec, scaled by how much you solved).
+- **2 hints per session** — a hint reveals only the **first and last letter** of the
+  answer (`o _ _ _ _ _ _ _ _ _   _ _ _ _ _ _ _ _ y`).
 - **Host a game with a room code** — the admin creates a room, gets a **share code**
   (+ invite link), and players join with it. No active room = no game (full host control).
 - **Username only** — no wallet, no sign-up. Just a name + the room code (auto mochi avatar).
-- **Hourly global leaderboard** — one global board that **auto-resets every clock hour**
-  (a live "resets in mm:ss" countdown is shown).
+- **Speed leaderboard** — ranks whoever finishes the quiz fastest with the most correct
+  (score already folds in the time bonus); **auto-resets every clock hour** with a live
+  "resets in mm:ss" countdown.
 - **Admin panel** — a discreet 🔒 button in the bottom-right corner opens the passcode-gated
   admin, where you input the questions/answers and create the room.
 - **Cheat-resistant** — in secure mode, answers never reach the browser and scores are

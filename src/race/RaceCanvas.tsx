@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { loadMascot } from "../mascot";
-import { drawScene, easeProgress, type Fx } from "./race";
+import { drawScene, easeProgress, type Fx, type Mood } from "./race";
 
 export interface FxEvent {
   id: number;
@@ -10,12 +10,13 @@ export interface FxEvent {
 interface Props {
   correctCount: number; // 0..10 -> drives progress
   fxEvent?: FxEvent | null;
+  mood?: Mood; // mochi face: idle / happy / angry
   className?: string;
 }
 
 // Canvas host: owns the rAF loop, eases progress toward correctCount/10, and fires
 // a transient boost/skid effect whenever fxEvent changes.
-export default function RaceCanvas({ correctCount, fxEvent, className }: Props) {
+export default function RaceCanvas({ correctCount, fxEvent, mood = "idle", className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mascotRef = useRef<HTMLCanvasElement | null>(null);
   const progressRef = useRef(0);
@@ -24,6 +25,8 @@ export default function RaceCanvas({ correctCount, fxEvent, className }: Props) 
   const fxUntilRef = useRef(0);
   const shakeRef = useRef(0);
   const lastFxId = useRef<number>(-1);
+  const moodRef = useRef<Mood>(mood);
+  moodRef.current = mood;
 
   useEffect(() => {
     let alive = true;
@@ -78,6 +81,7 @@ export default function RaceCanvas({ correctCount, fxEvent, className }: Props) 
         h: rect.height,
         progress: progressRef.current,
         fx: fxRef.current,
+        mood: moodRef.current,
         shake: shakeRef.current,
         mascot: mascotRef.current,
         t: (now - start) / 1000,

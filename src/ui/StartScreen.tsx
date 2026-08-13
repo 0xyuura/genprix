@@ -46,8 +46,9 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
         GenLayer <span className="text-magenta">Grand Prix</span>
       </h1>
       <p className="mt-2 text-white/70">
-        Enter the room code from the host, then answer 10 GenLayer questions — every correct
-        answer floors your mochi kart toward the finish. Fast + streaks score more.
+        Enter the room code from the host, then crack 10 GenLayer questions in any order — every
+        correct answer floors your mochi kart toward the finish. You get 10 minutes and 2 hints;
+        finish fast to top the leaderboard.
       </p>
 
       <div className="mt-5 rounded-3xl overflow-hidden border border-white/10 aspect-[16/7]">

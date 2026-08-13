@@ -45,6 +45,21 @@ function levenshtein(a: string, b: string): number {
   return prev[n];
 }
 
+// Hint mask: reveal only the FIRST and LAST visible character of the canonical
+// answer; every other character becomes "_" (spaces are preserved so word count
+// shows). E.g. "intelligent" -> "i _ _ _ _ _ _ _ _ _ t".
+export function maskAnswer(answer: string): string {
+  const chars = [...answer.trim()];
+  const lastIdx = chars.length - 1;
+  return chars
+    .map((ch, i) => {
+      if (ch === " ") return " ";
+      if (i === 0 || i === lastIdx) return ch;
+      return "_";
+    })
+    .join(" ");
+}
+
 export function checkAnswer(input: string, accepted: string[]): boolean {
   const n = normalize(input);
   if (!n) return false;

@@ -4,6 +4,7 @@ import { QUESTION_COUNT } from "./game/scoring";
 import RaceCanvas from "./race/RaceCanvas";
 import StartScreen from "./ui/StartScreen";
 import Hud from "./ui/Hud";
+import QuestionBoard from "./ui/QuestionBoard";
 import QuestionPanel from "./ui/QuestionPanel";
 import ResultsScreen from "./ui/ResultsScreen";
 import Leaderboard from "./ui/Leaderboard";
@@ -19,7 +20,7 @@ function initialView(): View {
 }
 
 export default function App() {
-  const { state, join, submit, playAgain, useHint } = useGame();
+  const { state, join, select, backToBoard, submit, useHint, playAgain } = useGame();
   const [view, setView] = useState<View>(initialView);
 
   useEffect(() => {
@@ -77,36 +78,39 @@ export default function App() {
     );
   } else {
     // playing
+    const openBq = state.selected != null ? state.board[state.selected] : null;
     screen = (
       <div className="mx-auto max-w-3xl px-4 py-5">
         <div className="rounded-3xl overflow-hidden border border-white/10 aspect-[16/7] mb-4">
           <RaceCanvas
-            correctCount={state.correctCount}
+            correctCount={state.solvedCount}
             fxEvent={state.fxEvent}
+            mood={state.mood}
             className="w-full h-full block"
           />
         </div>
 
         <Hud
-          index={state.index}
-          total={QUESTION_COUNT}
+          remainingMs={state.remainingMs}
           score={state.score}
-          streak={state.streak}
-          correctCount={state.correctCount}
+          solvedCount={state.solvedCount}
+          total={QUESTION_COUNT}
+          hintsLeft={state.hintsLeft}
         />
 
         <div className="mt-4">
-          {state.current && (
+          {openBq && state.selected != null ? (
             <QuestionPanel
-              question={state.current}
-              index={state.index}
-              reveal={state.reveal}
-              lastResult={state.lastResult}
-              submitting={state.submitting}
+              bq={openBq}
+              index={state.selected}
               hintsLeft={state.hintsLeft}
+              lastResult={state.lastResult}
               onUseHint={useHint}
               onSubmit={submit}
+              onBack={backToBoard}
             />
+          ) : (
+            <QuestionBoard board={state.board} onSelect={select} />
           )}
         </div>
       </div>
