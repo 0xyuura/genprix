@@ -152,6 +152,27 @@ node tools/bench-server.mjs 5210 --gzip     # serves dist/ with gzip
 node tools/bench-load.mjs http://127.0.0.1:5210 1000
 ```
 
+## Deploy (Vercel)
+
+Vercel auto-detects Vite (build `npm run build`, output `dist`). `vercel.json` adds two
+things the app needs in production:
+
+- a catch-all rewrite to `/index.html`, without which the `/admin` route 404s on a
+  static host (Vercel checks the filesystem first, so real assets are unaffected);
+- long cache headers for the content-hashed `/assets/*` bundle, shorter for `/brand/*`
+  since those filenames are stable.
+
+Set `VITE_ADMIN_PASSCODE` in **Project Settings → Environment Variables** (it is read at
+build time, so redeploy after changing it). Leave the Supabase vars unset to stay in
+local/demo mode.
+
+```bash
+npx vercel login
+npx vercel link
+npx vercel env add VITE_ADMIN_PASSCODE production
+npx vercel --prod
+```
+
 ## Tech
 
 Vite · React · TypeScript · Tailwind · Canvas 2D · Supabase (Postgres + `pgcrypto` +
