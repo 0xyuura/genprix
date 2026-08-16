@@ -9,13 +9,7 @@
 import { isSecureMode } from "./supabase";
 import { getActiveRoom, joinRoom, createRoom, type AdminQuestion } from "./backend";
 import { type Question } from "../game/quiz";
-import {
-  ROOM_KEY_PARAM,
-  decodeRoomKey,
-  encodeRoomKey,
-  roomKeyFromInput,
-  type RoomKeyData,
-} from "./roomkey";
+import { inviteLink, roomKeyFromInput, roomKeyFromLocation, type RoomKeyData } from "./roomkey";
 
 // Local/demo admin passcode. Set VITE_ADMIN_PASSCODE to override the demo default.
 //
@@ -155,11 +149,10 @@ export function adoptRoom(data: RoomKeyData | null): LocalRoom | null {
  * before the start screen asks whether a game is open, which is what lets a guest
  * land on a username box instead of "no game running".
  */
-export function adoptRoomFromUrl(search = window.location.search): LocalRoom | null {
+export function adoptRoomFromUrl(search?: string, pathname?: string): LocalRoom | null {
   if (isSecureMode()) return null; // secure mode has a real server to ask
-  const key = new URLSearchParams(search).get(ROOM_KEY_PARAM);
-  if (!key) return null;
-  return adoptRoom(decodeRoomKey(key));
+  const loc = typeof window === "undefined" ? null : window.location;
+  return adoptRoom(roomKeyFromLocation(pathname ?? loc?.pathname ?? "", search ?? loc?.search ?? ""));
 }
 
 /** Is there an unplayed room to join right now? */
@@ -202,7 +195,7 @@ export function activeRoomLocal(): LocalRoom | null {
 export function inviteLinkLocal(origin: string, code: string): string | null {
   const room = readLocalRoom();
   if (!room || room.code !== normalizeCode(code)) return null;
-  return `${origin}/?${ROOM_KEY_PARAM}=${encodeRoomKey({ code: room.code, questions: room.questions })}`;
+  return inviteLink(origin, { code: room.code, questions: room.questions });
 }
 
 /**

@@ -1,53 +1,88 @@
 import { describe, it, expect } from "vitest";
 import {
   ROOM_KEY_PARAM,
+  ROOM_PATH,
   decodeRoomKey,
   encodeRoomKey,
   inviteLink,
   roomKeyFromInput,
+  roomKeyFromLocation,
 } from "../data/roomkey";
 import { DEFAULT_QUESTIONS, type Question } from "../game/quiz";
 
-const custom: Question[] = [
-  { id: "q1", prompt: "Who runs the court of the internet?", accepted: ["genlayer"], hint: "Gen…" },
-  { id: "q2", prompt: "Answer with an accent: café?", accepted: ["café", "cafe"] },
-];
+const ORIGIN = "https://genprix.vercel.app";
+
+/** The bundled set with question `i` swapped for the host's own. */
+const edited = (i: number, q: Partial<Question> = {}): Question[] =>
+  DEFAULT_QUESTIONS.map((d, idx) =>
+    idx === i
+      ? {
+          id: d.id,
+          prompt: "Who runs the court of the internet?",
+          accepted: ["genlayer", "gen layer"],
+          hint: "Gen…",
+          ...q,
+        }
+      : d,
+  );
+
+describe("link length", () => {
+  it("keeps an unedited quiz down to a code-sized link", () => {
+    const link = inviteLink(ORIGIN, { code: "AB4K7Q", questions: DEFAULT_QUESTIONS });
+    expect(link).toBe(`${ORIGIN}${ROOM_PATH}0AB4K7Q`);
+    expect(link.length).toBeLessThan(40);
+  });
+
+  it("charges an edited quiz for the edits only, not the whole set", () => {
+    const one = inviteLink(ORIGIN, { code: "AB4K7Q", questions: edited(3) });
+    const all = inviteLink(ORIGIN, {
+      code: "AB4K7Q",
+      questions: DEFAULT_QUESTIONS.map((d, i) => ({ ...d, prompt: `rewritten question ${i}` })),
+    });
+    expect(one.length).toBeLessThan(200);
+    expect(one.length).toBeLessThan(all.length / 2);
+  });
+});
 
 describe("encode/decode round trip", () => {
-  it("carries a custom question set intact", () => {
-    const back = decodeRoomKey(encodeRoomKey({ code: "ABC123", questions: custom }));
-    expect(back?.code).toBe("ABC123");
-    expect(back?.questions).toHaveLength(2);
-    expect(back?.questions[0].prompt).toBe(custom[0].prompt);
-    expect(back?.questions[0].accepted).toEqual(["genlayer"]);
-    expect(back?.questions[0].hint).toBe("Gen…");
+  it("rebuilds the bundled set from the short key", () => {
+    const back = decodeRoomKey(encodeRoomKey({ code: "AB4K7Q", questions: DEFAULT_QUESTIONS }));
+    expect(back?.code).toBe("AB4K7Q");
+    expect(back?.questions).toEqual(DEFAULT_QUESTIONS);
   });
-  it("survives non-ASCII text", () => {
-    const back = decodeRoomKey(encodeRoomKey({ code: "ABC123", questions: custom }));
-    expect(back?.questions[1].prompt).toContain("café");
-    expect(back?.questions[1].accepted).toContain("café");
+
+  it("carries an edited question and leaves the rest bundled", () => {
+    const questions = edited(3);
+    const back = decodeRoomKey(encodeRoomKey({ code: "AB4K7Q", questions }));
+    expect(back?.questions).toHaveLength(DEFAULT_QUESTIONS.length);
+    expect(back?.questions[3].prompt).toBe("Who runs the court of the internet?");
+    expect(back?.questions[3].accepted).toEqual(["genlayer", "gen layer"]);
+    expect(back?.questions[3].hint).toBe("Gen…");
+    expect(back?.questions[0].prompt).toBe(DEFAULT_QUESTIONS[0].prompt);
+    expect(back?.questions[9].prompt).toBe(DEFAULT_QUESTIONS[9].prompt);
   });
+
+  it("survives non-ASCII and punctuation in a custom question", () => {
+    const questions = edited(0, { prompt: "Café or thé? — pick one", accepted: ["café", "thé"] });
+    const back = decodeRoomKey(encodeRoomKey({ code: "AB4K7Q", questions }));
+    expect(back?.questions[0].prompt).toBe("Café or thé? — pick one");
+    expect(back?.questions[0].accepted).toEqual(["café", "thé"]);
+  });
+
   it("drops an empty hint rather than shipping an empty string", () => {
-    const back = decodeRoomKey(encodeRoomKey({ code: "ABC123", questions: custom }));
+    const back = decodeRoomKey(encodeRoomKey({ code: "AB4K7Q", questions: edited(1, { hint: "" }) }));
     expect(back?.questions[1].hint).toBeUndefined();
   });
+
   it("uppercases the code so a lowercased link still matches", () => {
-    expect(decodeRoomKey(encodeRoomKey({ code: "abc123", questions: custom }))?.code).toBe(
-      "ABC123",
+    expect(decodeRoomKey(encodeRoomKey({ code: "ab4k7q", questions: DEFAULT_QUESTIONS }))?.code).toBe(
+      "AB4K7Q",
     );
   });
 
-  it("packs the default question set as a flag, not a payload", () => {
-    const short = encodeRoomKey({ code: "ABC123", questions: DEFAULT_QUESTIONS });
-    const long = encodeRoomKey({ code: "ABC123", questions: custom });
-    expect(short.length).toBeLessThan(long.length);
-    expect(short.length).toBeLessThan(60); // fits in any chat message
-    expect(decodeRoomKey(short)?.questions).toEqual(DEFAULT_QUESTIONS);
-  });
-
   it("produces a URL-safe key", () => {
-    const key = encodeRoomKey({ code: "ABC123", questions: custom });
-    expect(key).toMatch(/^[A-Za-z0-9_-]+$/);
+    const key = encodeRoomKey({ code: "AB4K7Q", questions: edited(2) });
+    expect(key).toMatch(/^[A-Za-z0-9._-]+$/);
     expect(encodeURIComponent(key)).toBe(key);
   });
 });
@@ -56,44 +91,75 @@ describe("decodeRoomKey rejects junk", () => {
   it("returns null for empty, malformed or truncated input", () => {
     expect(decodeRoomKey("")).toBeNull();
     expect(decodeRoomKey("   ")).toBeNull();
-    expect(decodeRoomKey("ABC123")).toBeNull(); // a bare short code is not a key
     expect(decodeRoomKey("!!!not base64!!!")).toBeNull();
-    const key = encodeRoomKey({ code: "ABC123", questions: custom });
-    expect(decodeRoomKey(key.slice(0, key.length - 8))).toBeNull();
   });
-  it("returns null for a key from a different version", () => {
-    const wrongVersion = btoa(JSON.stringify({ v: 99, c: "ABC123", d: 1 }))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-    expect(decodeRoomKey(wrongVersion)).toBeNull();
+
+  // A chat client that clips the URL must not hand over a half-decoded quiz.
+  it("refuses a truncated or tampered custom key instead of decoding it wrong", () => {
+    const key = encodeRoomKey({ code: "AB4K7Q", questions: edited(4) });
+    expect(decodeRoomKey(key)).not.toBeNull();
+    for (const cut of [1, 5, 8, 20]) {
+      expect(decodeRoomKey(key.slice(0, key.length - cut))).toBeNull();
+    }
+    const [head, body, crc] = key.split(".");
+    expect(decodeRoomKey(`${head}.${body.slice(0, -4)}XXXX.${crc}`)).toBeNull();
   });
-  it("returns null when a question is missing its answers", () => {
-    const broken = btoa(JSON.stringify({ v: 1, c: "ABC123", q: [["prompt only", [], ""]] }))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-    expect(decodeRoomKey(broken)).toBeNull();
+
+  // A room code and a room key must never be confused: codes never contain 0 or 1.
+  it("never reads a hand-typed room code as a key", () => {
+    for (const code of ["AB4K7Q", "DEF456", "CAT999", "ZZZZZZ"]) {
+      expect(decodeRoomKey(code)).toBeNull();
+    }
+  });
+
+  it("returns null for a key whose code is not code-shaped", () => {
+    expect(decodeRoomKey("0AB")).toBeNull(); // too short
+    expect(decodeRoomKey("0AB-K7Q")).toBeNull(); // not alphanumeric
   });
 });
 
-describe("inviteLink / roomKeyFromInput", () => {
-  const data = { code: "ABC123", questions: custom };
+describe("v1 keys still open", () => {
+  const v1 = (payload: object): string =>
+    btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-  it("builds a link the app can read back", () => {
-    const link = inviteLink("https://genprix.vercel.app", data);
-    expect(link.startsWith(`https://genprix.vercel.app/?${ROOM_KEY_PARAM}=`)).toBe(true);
-    expect(roomKeyFromInput(link)?.code).toBe("ABC123");
+  it("opens a default-set link handed out before the short format", () => {
+    const back = decodeRoomKey(v1({ v: 1, c: "TEST99", d: 1 }));
+    expect(back?.code).toBe("TEST99");
+    expect(back?.questions).toEqual(DEFAULT_QUESTIONS);
   });
-  it("accepts a pasted bare key as well as a full link", () => {
-    expect(roomKeyFromInput(encodeRoomKey(data))?.code).toBe("ABC123");
+  it("opens a custom link handed out before the short format", () => {
+    const back = decodeRoomKey(v1({ v: 1, c: "TEST99", q: [["old prompt", ["yes"], ""]] }));
+    expect(back?.questions[0].prompt).toBe("old prompt");
   });
-  it("ignores anything trailing the key in a pasted URL", () => {
-    const link = inviteLink("https://genprix.vercel.app", data) + "&utm=x#top";
-    expect(roomKeyFromInput(link)?.questions).toHaveLength(2);
+  it("still refuses a v1 key from an unknown version", () => {
+    expect(decodeRoomKey(v1({ v: 99, c: "TEST99", d: 1 }))).toBeNull();
   });
+});
+
+describe("reading a key back out of a link", () => {
+  const data = { code: "AB4K7Q", questions: edited(5) };
+
+  it("reads the path form the app now shares", () => {
+    expect(roomKeyFromInput(inviteLink(ORIGIN, data))?.code).toBe("AB4K7Q");
+    expect(roomKeyFromLocation(`${ROOM_PATH}${encodeRoomKey(data)}`, "")?.code).toBe("AB4K7Q");
+  });
+
+  it("still reads the older ?r= query form", () => {
+    const legacy = `${ORIGIN}/?${ROOM_KEY_PARAM}=${encodeRoomKey(data)}`;
+    expect(roomKeyFromInput(legacy)?.code).toBe("AB4K7Q");
+    expect(roomKeyFromLocation("/", `?${ROOM_KEY_PARAM}=${encodeRoomKey(data)}`)?.code).toBe(
+      "AB4K7Q",
+    );
+  });
+
+  it("accepts a pasted bare key, and ignores anything trailing it", () => {
+    expect(roomKeyFromInput(encodeRoomKey(data))?.code).toBe("AB4K7Q");
+    expect(roomKeyFromInput(inviteLink(ORIGIN, data) + "?utm=x#top")?.questions).toHaveLength(10);
+  });
+
   it("returns null for a short code or noise, so the normal path still runs", () => {
-    expect(roomKeyFromInput("ABC123")).toBeNull();
+    expect(roomKeyFromInput("AB4K7Q")).toBeNull();
     expect(roomKeyFromInput("")).toBeNull();
+    expect(roomKeyFromLocation("/", "")).toBeNull();
   });
 });

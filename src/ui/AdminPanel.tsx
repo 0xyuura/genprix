@@ -127,7 +127,8 @@ export default function AdminPanel({ onBack }: Props) {
           </button>
           <p className="mt-3 text-xs text-white/50">
             The link carries the questions, so anyone who opens it just types a username and
-            races. The 6-character code on its own only works on this device.
+            races. The 6-character code on its own only works on this device. Edit a question
+            and the link grows, because the change has to travel with it.
           </p>
           <p className="mt-2 text-xs text-amber">
             Single use per player. Create a new room for the next round.

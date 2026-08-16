@@ -15,7 +15,7 @@ import {
   withPlayer,
   type LocalRoom,
 } from "../data/rooms";
-import { ROOM_KEY_PARAM, encodeRoomKey } from "../data/roomkey";
+import { ROOM_PATH, encodeRoomKey } from "../data/roomkey";
 import { DEFAULT_QUESTIONS } from "../game/quiz";
 
 const room = (over: Partial<LocalRoom> = {}): LocalRoom => ({
@@ -82,6 +82,7 @@ describe("a guest joining from an invite link", () => {
   }
 
   const hostKey = () => encodeRoomKey({ code: "ABC123", questions: DEFAULT_QUESTIONS });
+  const hostPath = () => `${ROOM_PATH}${hostKey()}`;
 
   beforeEach(() => {
     // A brand-new device: empty storage, no room, nothing about the host.
@@ -93,42 +94,43 @@ describe("a guest joining from an invite link", () => {
   });
 
   it("adopts the room from the link and then joins on a username alone", () => {
-    const adopted = adoptRoomFromUrl(`?${ROOM_KEY_PARAM}=${hostKey()}`);
+    const adopted = adoptRoomFromUrl("", hostPath());
     expect(adopted?.code).toBe("ABC123");
     expect(adopted?.status).toBe("open");
     expect(joinRoomLocal("ABC123", "guest")).toHaveLength(DEFAULT_QUESTIONS.length);
   });
 
   it("also accepts the link pasted straight into the code box", () => {
-    const link = `https://genprix.vercel.app/?${ROOM_KEY_PARAM}=${hostKey()}`;
+    const link = `https://genprix.vercel.app${hostPath()}`;
     expect(joinRoomLocal(link, "guest")).toHaveLength(DEFAULT_QUESTIONS.length);
   });
 
   it("burns the code for a guest who joined by link, not just by code", () => {
-    const link = `https://genprix.vercel.app/?${ROOM_KEY_PARAM}=${hostKey()}`;
+    const link = `https://genprix.vercel.app${hostPath()}`;
     joinRoomLocal(link, "guest");
     closeRoomLocal(link); // the run ends; useGame passes back whatever was joined with
     expect(() => joinRoomLocal(link, "someone-else")).toThrow(ROOM_USED_MSG);
   });
 
   it("re-opening the link does not resurrect a code this device already played", () => {
-    const search = `?${ROOM_KEY_PARAM}=${hostKey()}`;
-    adoptRoomFromUrl(search);
+    const path = hostPath();
+    adoptRoomFromUrl("", path);
     joinRoomLocal("ABC123", "guest");
     closeRoomLocal("ABC123");
-    expect(adoptRoomFromUrl(search)?.status).toBe("done");
+    expect(adoptRoomFromUrl("", path)?.status).toBe("done");
     expect(() => joinRoomLocal("ABC123", "guest")).toThrow(ROOM_USED_MSG);
   });
 
   it("ignores a URL with no room key, leaving the normal path alone", () => {
-    expect(adoptRoomFromUrl("?utm_source=x")).toBeNull();
+    expect(adoptRoomFromUrl("?utm_source=x", "/")).toBeNull();
     expect(adoptRoom(null)).toBeNull();
   });
 
   it("hands the host a link that carries the room back out again", () => {
-    adoptRoomFromUrl(`?${ROOM_KEY_PARAM}=${hostKey()}`);
+    adoptRoomFromUrl("", hostPath());
     const link = inviteLinkLocal("https://genprix.vercel.app", "ABC123");
-    expect(link).toContain(`?${ROOM_KEY_PARAM}=`);
+    expect(link).toContain(ROOM_PATH);
+    expect(link!.length).toBeLessThan(45); // short enough to paste anywhere
     expect(inviteLinkLocal("https://genprix.vercel.app", "NOPE99")).toBeNull();
   });
 });
