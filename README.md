@@ -32,13 +32,14 @@ Built for the GenLayer community.
   can never out-rank a complete one.
 - **2 hints per session** — a hint reveals only the **first and last letter** of the
   answer (`o _ _ _ _ _ _ _ _ _   _ _ _ _ _ _ _ _ y`).
-- **Host a game with a room code** — the admin creates a room, gets a **share code**
-  (+ invite link), and players join with it. No active room = no game (full host control).
-- **One code, one game** — a room code is **single use**. It is burned the moment a run
-  ends, and a name that already raced in that room cannot rejoin it, so the same code can
-  never host a second round. Hosts create a fresh room per round; that is what stops
-  anyone replaying the same questions to farm the leaderboard.
-- **Username only** — no wallet, no sign-up. Just a name + the room code (auto mochi avatar).
+- **Host a game with an invite link** — the admin creates a room and gets a link that
+  **carries the room inside it** (`/?r=<key>`). Anyone who opens it lands on a single
+  username box and races; no server, no sign-up, and their device never needs to have
+  heard of the host. No room = no game, so the host still controls when play opens.
+- **One code, one game** — a room is **single use**. It is burned the moment a run ends,
+  and a name that already raced in it cannot rejoin, so the same room can never host a
+  second round on that device. Hosts create a fresh room per round.
+- **Username only** — no wallet, no sign-up. Just a name (auto mochi avatar).
 - **Speed leaderboard** — first place goes to whoever completes the game fastest with
   the most exact typing, and the board reads down from there until the clock runs out.
   Questions solved is the first key (a correct answer outweighs every bonus combined),
@@ -88,10 +89,23 @@ Connect a free Supabase project (~5 min) — see **[SETUP.md](./SETUP.md)**. In 
 A **"Global board"** badge on the start screen confirms secure mode is on.
 
 ### Hosting a game
-🔒 (bottom-right) → passcode → edit the 10 questions → **Create room & get code**. Share the
-code / invite link. Players join and play those questions. The code covers **one game only** —
-create a new room for the next round. The global leaderboard resets automatically at the top
-of every hour.
+🔒 (bottom-right) → passcode → edit the 10 questions → **Create room & get code** → **Copy
+invite link**. Share that link. Players open it, type a username, and race those questions.
+The room covers one game only, so create a new one for the next round. The leaderboard
+resets at the top of every hour.
+
+**Share the link, not the six-character code.** In local/demo mode the code is only a label
+for a room living in the host's own browser, so typing it on another device cannot work —
+that device has never seen the room. The link is what carries the questions. (The code box
+also accepts a pasted link or room key, for anyone who ends up there.) An unedited quiz makes
+a short link, since every device already ships those ten questions; only an edited quiz pays
+for the full payload.
+
+**What local/demo mode still cannot do:** scores stay on the device that made them, so
+players will not see each other on the leaderboard, and "one code, one game" is enforced per
+device rather than globally. Both need a shared backend: connect Supabase (above) and the
+room code works on its own, the board goes global, and the single-use rule is enforced in
+Postgres.
 
 ## Security
 
@@ -222,6 +236,6 @@ tools/        brand source sheet, mascot bake notes, perf bench scripts
 src/game/     typing engine, quiz engine, scoring, username, state machine
 src/race/     canvas scene + kart renderer + rAF host
 src/ui/       screens (start, question, results, leaderboard, admin), avatar, share card
-src/data/     supabase client, RPC wrappers, leaderboard adapters
+src/data/     supabase client, RPC wrappers, leaderboard adapters, invite-link room keys
 supabase.sql  schema + RLS + server-authoritative RPCs
 ```

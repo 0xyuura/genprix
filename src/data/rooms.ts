@@ -9,6 +9,13 @@
 import { isSecureMode } from "./supabase";
 import { getActiveRoom, joinRoom, createRoom, type AdminQuestion } from "./backend";
 import { type Question } from "../game/quiz";
+import {
+  ROOM_KEY_PARAM,
+  decodeRoomKey,
+  encodeRoomKey,
+  roomKeyFromInput,
+  type RoomKeyData,
+} from "./roomkey";
 
 // Local/demo admin passcode. Set VITE_ADMIN_PASSCODE to override the demo default.
 //
@@ -39,7 +46,8 @@ export const ROOM_USED_MSG =
 export const ROOM_REPLAY_MSG =
   "You already raced with this code. Ask the host for a new one.";
 export const NO_ROOM_MSG = "No active room. Ask the host to open one.";
-export const BAD_CODE_MSG = "Room not found or closed.";
+export const BAD_CODE_MSG =
+  "That code was created on another device. Ask the host for the invite link.";
 
 function genCode(): string {
   const s = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no ambiguous 0/O/1/I/L
@@ -118,6 +126,42 @@ const toAdmin = (qs: Question[]): AdminQuestion[] =>
     hint: q.hint ?? "",
   }));
 
+/**
+ * Adopt a room handed over in an invite link, so a guest's device knows about a
+ * room its own admin never created. Idempotent, and it never resurrects a code
+ * this device has already played: if a room with the same code is already on
+ * file, that record wins, keeping the single-use rule intact across reloads.
+ *
+ * Returns the room now active, or null when the key was unusable.
+ */
+export function adoptRoom(data: RoomKeyData | null): LocalRoom | null {
+  if (!data || !data.code) return null;
+  const code = normalizeCode(data.code);
+  const existing = readLocalRoom();
+  if (existing && existing.code === code) return existing;
+  const room: LocalRoom = {
+    code,
+    questions: data.questions,
+    status: "open",
+    players: [],
+    createdAt: Date.now(),
+  };
+  writeLocalRoom(room);
+  return room;
+}
+
+/**
+ * Read the invite link on start-up and adopt whatever room it carries. Runs once
+ * before the start screen asks whether a game is open, which is what lets a guest
+ * land on a username box instead of "no game running".
+ */
+export function adoptRoomFromUrl(search = window.location.search): LocalRoom | null {
+  if (isSecureMode()) return null; // secure mode has a real server to ask
+  const key = new URLSearchParams(search).get(ROOM_KEY_PARAM);
+  if (!key) return null;
+  return adoptRoom(decodeRoomKey(key));
+}
+
 /** Is there an unplayed room to join right now? */
 export async function isRoomOpen(): Promise<boolean> {
   if (isSecureMode()) {
@@ -136,18 +180,40 @@ export async function joinRoomSecure(code: string, username: string, seed: strin
 }
 
 export function joinRoomLocal(code: string, username: string): Question[] {
-  const room = readLocalRoom();
-  const err = roomJoinError(room, code, username);
+  // The code box also takes a full invite link or a pasted room key, so a guest
+  // who was handed the link as text is not stuck either.
+  const fromKey = roomKeyFromInput(code);
+  const room = fromKey ? adoptRoom(fromKey) : readLocalRoom();
+  const wanted = fromKey ? fromKey.code : code;
+
+  const err = roomJoinError(room, wanted, username);
   if (err) throw new Error(err);
   const joined = withPlayer(room as LocalRoom, username);
   writeLocalRoom(joined);
   return joined.questions;
 }
 
-/** Called when a run ends: burns the code so the same room can't host a second game. */
+/** The room this device is currently holding, if any. */
+export function activeRoomLocal(): LocalRoom | null {
+  return readLocalRoom();
+}
+
+/** The share link for a local room: the room travels inside it. */
+export function inviteLinkLocal(origin: string, code: string): string | null {
+  const room = readLocalRoom();
+  if (!room || room.code !== normalizeCode(code)) return null;
+  return `${origin}/?${ROOM_KEY_PARAM}=${encodeRoomKey({ code: room.code, questions: room.questions })}`;
+}
+
+/**
+ * Called when a run ends: burns the code so the same room can't host a second game.
+ * Accepts whatever the player joined with — a short code, an invite link, or a room
+ * key — because a guest who joined by link would otherwise leave the room unburned.
+ */
 export function closeRoomLocal(code: string): void {
   const room = readLocalRoom();
-  if (!room || room.code !== normalizeCode(code)) return;
+  const wanted = normalizeCode(roomKeyFromInput(code)?.code ?? code);
+  if (!room || room.code !== wanted) return;
   writeLocalRoom(closedRoom(room));
 }
 

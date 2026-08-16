@@ -1,15 +1,22 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   BAD_CODE_MSG,
   NO_ROOM_MSG,
   ROOM_REPLAY_MSG,
   ROOM_USED_MSG,
+  adoptRoom,
+  adoptRoomFromUrl,
+  closeRoomLocal,
   closedRoom,
+  inviteLinkLocal,
+  joinRoomLocal,
   normalizeCode,
   roomJoinError,
   withPlayer,
   type LocalRoom,
 } from "../data/rooms";
+import { ROOM_KEY_PARAM, encodeRoomKey } from "../data/roomkey";
+import { DEFAULT_QUESTIONS } from "../game/quiz";
 
 const room = (over: Partial<LocalRoom> = {}): LocalRoom => ({
   code: "ABC123",
@@ -54,6 +61,75 @@ describe("roomJoinError", () => {
     expect(roomJoinError(room({ players: ["Yuura"] }), "ABC123", "  yUUra ")).toBe(
       ROOM_REPLAY_MSG,
     );
+  });
+});
+
+// The bug this fixes: the host shares a room, the guest's device has never heard
+// of it, and the start screen says "no game running". The invite link now carries
+// the room, so a guest device can join with nothing but a username.
+describe("a guest joining from an invite link", () => {
+  class MemStorage {
+    private m = new Map<string, string>();
+    getItem(k: string) {
+      return this.m.has(k) ? this.m.get(k)! : null;
+    }
+    setItem(k: string, v: string) {
+      this.m.set(k, v);
+    }
+    clear() {
+      this.m.clear();
+    }
+  }
+
+  const hostKey = () => encodeRoomKey({ code: "ABC123", questions: DEFAULT_QUESTIONS });
+
+  beforeEach(() => {
+    // A brand-new device: empty storage, no room, nothing about the host.
+    (globalThis as unknown as { localStorage: MemStorage }).localStorage = new MemStorage();
+  });
+
+  it("has no room at all before the link is opened", () => {
+    expect(() => joinRoomLocal("ABC123", "guest")).toThrow(NO_ROOM_MSG);
+  });
+
+  it("adopts the room from the link and then joins on a username alone", () => {
+    const adopted = adoptRoomFromUrl(`?${ROOM_KEY_PARAM}=${hostKey()}`);
+    expect(adopted?.code).toBe("ABC123");
+    expect(adopted?.status).toBe("open");
+    expect(joinRoomLocal("ABC123", "guest")).toHaveLength(DEFAULT_QUESTIONS.length);
+  });
+
+  it("also accepts the link pasted straight into the code box", () => {
+    const link = `https://genprix.vercel.app/?${ROOM_KEY_PARAM}=${hostKey()}`;
+    expect(joinRoomLocal(link, "guest")).toHaveLength(DEFAULT_QUESTIONS.length);
+  });
+
+  it("burns the code for a guest who joined by link, not just by code", () => {
+    const link = `https://genprix.vercel.app/?${ROOM_KEY_PARAM}=${hostKey()}`;
+    joinRoomLocal(link, "guest");
+    closeRoomLocal(link); // the run ends; useGame passes back whatever was joined with
+    expect(() => joinRoomLocal(link, "someone-else")).toThrow(ROOM_USED_MSG);
+  });
+
+  it("re-opening the link does not resurrect a code this device already played", () => {
+    const search = `?${ROOM_KEY_PARAM}=${hostKey()}`;
+    adoptRoomFromUrl(search);
+    joinRoomLocal("ABC123", "guest");
+    closeRoomLocal("ABC123");
+    expect(adoptRoomFromUrl(search)?.status).toBe("done");
+    expect(() => joinRoomLocal("ABC123", "guest")).toThrow(ROOM_USED_MSG);
+  });
+
+  it("ignores a URL with no room key, leaving the normal path alone", () => {
+    expect(adoptRoomFromUrl("?utm_source=x")).toBeNull();
+    expect(adoptRoom(null)).toBeNull();
+  });
+
+  it("hands the host a link that carries the room back out again", () => {
+    adoptRoomFromUrl(`?${ROOM_KEY_PARAM}=${hostKey()}`);
+    const link = inviteLinkLocal("https://genprix.vercel.app", "ABC123");
+    expect(link).toContain(`?${ROOM_KEY_PARAM}=`);
+    expect(inviteLinkLocal("https://genprix.vercel.app", "NOPE99")).toBeNull();
   });
 });
 

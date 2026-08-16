@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { isSecureMode } from "../data/supabase";
 import { adminGetQuestions, type AdminQuestion } from "../data/backend";
-import { createRoomAny, localAdminUnlock } from "../data/rooms";
+import { createRoomAny, inviteLinkLocal, localAdminUnlock } from "../data/rooms";
 import { DEFAULT_QUESTIONS } from "../game/quiz";
 
 interface Props {
@@ -57,7 +57,9 @@ export default function AdminPanel({ onBack }: Props) {
     }
   };
 
-  const shareLink = code ? `${window.location.origin}/?room=${code}` : "";
+  // The link carries the whole room, so a guest's device needs no server and no
+  // prior knowledge of this room — opening the link is the entire join flow.
+  const shareLink = code ? (inviteLinkLocal(window.location.origin, code) ?? "") : "";
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(shareLink);
@@ -113,13 +115,22 @@ export default function AdminPanel({ onBack }: Props) {
 
       {code && (
         <div className="panel p-5 mb-4 text-center animate-pop border-teal/40">
-          <p className="text-white/60 text-sm">Room is live. Share this code:</p>
-          <p className="font-display font-bold text-4xl tracking-[0.3em] text-teal my-2">{code}</p>
-          <button className="text-sm text-teal hover:underline" onClick={copy}>
-            {copied ? "✓ Link copied" : `Copy invite link (${shareLink})`}
+          <p className="text-white/60 text-sm">Room {code} is live. Share this link:</p>
+          <p className="mt-2 mx-auto max-w-full truncate rounded-xl bg-black/40 px-3 py-2 font-mono text-xs text-teal/80">
+            {shareLink}
+          </p>
+          <button
+            className="btn-arcade mt-3 !py-2 !px-5 text-sm !bg-teal !text-void"
+            onClick={copy}
+          >
+            {copied ? "✓ Copied" : "Copy invite link"}
           </button>
-          <p className="mt-3 text-xs text-amber">
-            Single use. Create a new room for the next round.
+          <p className="mt-3 text-xs text-white/50">
+            The link carries the questions, so anyone who opens it just types a username and
+            races. The 6-character code on its own only works on this device.
+          </p>
+          <p className="mt-2 text-xs text-amber">
+            Single use per player. Create a new room for the next round.
           </p>
         </div>
       )}
