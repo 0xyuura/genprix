@@ -6,9 +6,19 @@ interface Props {
   solvedCount: number;
   total: number;
   hintsLeft: number;
+  wpm: number; // session average, updated as each question passage is completed
+  accuracy: number; // 0..1
 }
 
-export default function Hud({ remainingMs, score, solvedCount, total, hintsLeft }: Props) {
+export default function Hud({
+  remainingMs,
+  score,
+  solvedCount,
+  total,
+  hintsLeft,
+  wpm,
+  accuracy,
+}: Props) {
   const danger = remainingMs <= 60_000;
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -38,9 +48,14 @@ export default function Hud({ remainingMs, score, solvedCount, total, hintsLeft 
         </div>
       </div>
 
-      <span className="font-display font-bold text-xl text-teal tabular-nums">
-        {score.toLocaleString()} <span className="text-white/40 text-sm">pts</span>
-      </span>
+      <div className="flex items-center gap-3">
+        <span className="font-mono text-xs text-white/50 tabular-nums">
+          ⌨ {Math.round(wpm)} wpm · {Math.round(accuracy * 100)}%
+        </span>
+        <span className="font-display font-bold text-xl text-teal tabular-nums">
+          {score.toLocaleString()} <span className="text-white/40 text-sm">pts</span>
+        </span>
+      </div>
     </div>
   );
 }

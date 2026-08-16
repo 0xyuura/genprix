@@ -1,28 +1,43 @@
 # 🏁 GenLayer Grand Prix
 
-A GenLayer-branded quiz-racer. Pick any of 10 GenLayer trivia questions, in any order, and
-type your answer — every **correct** one floors it and the mochi mascot's kart races one
-checkpoint closer to the finish line. You get **10 minutes** for the whole quiz; finishing
-faster scores higher. Built for the GenLayer community.
+A GenLayer-branded **typing race** on trivia, in the spirit of
+[TypeRacer](https://play.typeracer.com/). Pick any of 10 GenLayer questions, in any order,
+then play it in two typed stages: **retype the question verbatim** — your mochi kart moves
+with every correct character — and then **type the answer** to bank the checkpoint. You get
+**10 minutes** for the whole quiz; speed, accuracy and correct answers all feed your score.
+Built for the GenLayer community.
 
 ![start screen](docs/screenshot-start.png)
 
 ## Features
 
+- **TypeRacer-style question stage** — the question is a passage you retype character by
+  character. Correct characters go green, a wrong one goes red and **freezes the kart until
+  you backspace it**, and live WPM + accuracy tick as you type. Pasting is rejected outright:
+  anything that jumps more than one character at a time is not typing.
+- **Two typed stages per question** — retype the question (worth 70% of that question's
+  kart distance), which unlocks the answer field; type the answer to bank the checkpoint.
+  Half-typed questions keep their progress if you jump back to the board.
 - **Pick-your-own-order question board** — all 10 questions are shown up front; play them
-  in whatever order you like, and retry a question as many times as you want.
-- **Type-to-answer quiz** — 10 fact-checked GenLayer questions, smart answer matching
-  (case/punctuation-insensitive, accepts synonyms, tolerates a 1-char typo).
+  in whatever order you like, and retry an answer as many times as you want.
+- **Smart answer matching** — 10 fact-checked GenLayer questions, case/punctuation-
+  insensitive, accepts synonyms, tolerates a 1-char typo.
 - **Smash-Karts-style race** — Canvas side-scroller with the mochi kart, parallax
   GenLayer scenery, boost on correct, skid on wrong, checkpoints + finish flag.
 - **Mochi reacts** — the mascot's face turns **happy** 😄 on a correct answer and
   **angry** 😡 on a wrong one (aura, hop, and expression drawn on the canvas).
-- **10-minute session timer** for the whole quiz · score = 100 per correct answer +
-  a remaining-time bonus (5/sec, scaled by how much you solved).
+- **10-minute session timer** for the whole quiz · score = 100 per correct answer + a
+  remaining-time bonus (5/sec) + a typing bonus (2 per WPM × accuracy, WPM capped at 200).
+  Both bonuses are scaled by the fraction solved, so an early quit can't out-score a
+  complete run.
 - **2 hints per session** — a hint reveals only the **first and last letter** of the
   answer (`o _ _ _ _ _ _ _ _ _   _ _ _ _ _ _ _ _ y`).
 - **Host a game with a room code** — the admin creates a room, gets a **share code**
   (+ invite link), and players join with it. No active room = no game (full host control).
+- **One code, one game** — a room code is **single use**. It is burned the moment a run
+  ends, and a name that already raced in that room cannot rejoin it, so the same code can
+  never host a second round. Hosts create a fresh room per round; that is what stops
+  anyone replaying the same questions to farm the leaderboard.
 - **Username only** — no wallet, no sign-up. Just a name + the room code (auto mochi avatar).
 - **Speed leaderboard** — ranks whoever finishes the quiz fastest with the most correct
   (score already folds in the time bonus); **auto-resets every clock hour** with a live
@@ -72,8 +87,9 @@ A **"Global board"** badge on the start screen confirms secure mode is on.
 
 ### Hosting a game
 🔒 (bottom-right) → passcode → edit the 10 questions → **Create room & get code**. Share the
-code / invite link. Players join and play those questions. The global leaderboard resets
-automatically at the top of every hour.
+code / invite link. Players join and play those questions. The code covers **one game only** —
+create a new room for the next round. The global leaderboard resets automatically at the top
+of every hour.
 
 ## Security
 
@@ -86,7 +102,10 @@ Local/demo mode is not secured (there's no shared board to cheat). **Secure mode
 - **Server-authoritative scoring** — there is no client "submit score" path. A run is a
   server-side session (`start_run` → `answer_question` × N → `finish_run`); the DB checks
   each answer, measures timing on its own clock (so speed can't be faked), computes the
-  score, clamps it to the maximum possible (3375), and writes the only leaderboard row.
+  score, clamps it to the maximum possible (4400), and writes the only leaderboard row.
+- **Single-use room codes are enforced in Postgres too** — `finish_run` flips the room to
+  `done`, and `join_room` refuses both a closed code and a name that already has a run in
+  that room.
 - **Admin passcode** — stored as a **bcrypt hash** (never shipped to the client),
   validated only inside a `SECURITY DEFINER` RPC, with **rate-limit lockout** (5 failed
   attempts / 15 min) so a 6-digit code can't be brute-forced through the API.
@@ -198,7 +217,7 @@ Vite · React · TypeScript · Tailwind · Canvas 2D · Supabase (Postgres + `pg
 
 ```
 tools/        brand source sheet, mascot bake notes, perf bench scripts
-src/game/     quiz engine, scoring, username, state machine
+src/game/     typing engine, quiz engine, scoring, username, state machine
 src/race/     canvas scene + kart renderer + rAF host
 src/ui/       screens (start, question, results, leaderboard, admin), avatar, share card
 src/data/     supabase client, RPC wrappers, leaderboard adapters

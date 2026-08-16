@@ -107,8 +107,10 @@ export default function AdminPanel({ onBack }: Props) {
         </button>
       </div>
       <p className="text-xs text-white/40 mb-4">
-        Edit the 10 questions, then create a room. Players join with the code; the leaderboard
-        resets every hour automatically.
+        Edit the 10 questions, then create a room. Players retype each question before answering it.
+        <strong className="text-amber"> A code is single use</strong> — it hosts one game and dies
+        when that run ends, so create a fresh room for every round. The leaderboard resets every
+        hour automatically.
       </p>
 
       {code && (
@@ -118,6 +120,9 @@ export default function AdminPanel({ onBack }: Props) {
           <button className="text-sm text-teal hover:underline" onClick={copy}>
             {copied ? "✓ Link copied" : `Copy invite link (${shareLink})`}
           </button>
+          <p className="mt-3 text-xs text-amber">
+            🔒 Single use — this code covers one game only. Create a new room for the next round.
+          </p>
         </div>
       )}
       {msg && <p className="mb-3 text-bad">{msg}</p>}

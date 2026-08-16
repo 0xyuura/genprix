@@ -6,6 +6,8 @@ import {
   SESSION_MS,
   QUESTION_COUNT,
   POINTS_PER_CORRECT,
+  typingBonus,
+  WPM_CAP,
 } from "../game/scoring";
 
 describe("runScore", () => {
@@ -27,8 +29,32 @@ describe("runScore", () => {
     const earlyQuit = runScore(3, SESSION_MS * 0.9); // 3/10 with 9 min left
     expect(fullFast).toBeGreaterThan(earlyQuit);
   });
-  it("MAX_SCORE is a perfect instant run", () => {
-    expect(MAX_SCORE).toBe(runScore(QUESTION_COUNT, SESSION_MS));
+  it("MAX_SCORE is a perfect instant run typed at the WPM cap", () => {
+    expect(MAX_SCORE).toBe(runScore(QUESTION_COUNT, SESSION_MS, WPM_CAP, 1));
+  });
+  it("rewards faster typing on an otherwise identical run", () => {
+    const fast = runScore(10, SESSION_MS * 0.5, 90, 1);
+    const slow = runScore(10, SESSION_MS * 0.5, 30, 1);
+    expect(fast).toBeGreaterThan(slow);
+  });
+  it("defaults to no typing bonus so a run without typing stats still scores", () => {
+    expect(runScore(5, 0)).toBe(5 * POINTS_PER_CORRECT);
+  });
+});
+
+describe("typingBonus", () => {
+  it("is zero with nothing solved", () => {
+    expect(typingBonus(120, 1, 0)).toBe(0);
+  });
+  it("scales with accuracy", () => {
+    expect(typingBonus(100, 0.5, 10)).toBeLessThan(typingBonus(100, 1, 10));
+  });
+  it("caps absurd WPM claims", () => {
+    expect(typingBonus(10_000, 1, 10)).toBe(typingBonus(WPM_CAP, 1, 10));
+  });
+  it("clamps negative or out-of-range inputs", () => {
+    expect(typingBonus(-50, 1, 10)).toBe(0);
+    expect(typingBonus(60, 5, 10)).toBe(typingBonus(60, 1, 10));
   });
 });
 

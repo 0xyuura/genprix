@@ -1,14 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { checkAnswer, maskAnswer, type Question } from "./quiz";
 import { runScore, SESSION_MS, HINTS_PER_SESSION, QUESTION_COUNT } from "./scoring";
+import {
+  addPassage,
+  applyInput,
+  emptyTotals,
+  isComplete,
+  newTyping,
+  progressOf,
+  totalsAccuracy,
+  totalsWpm,
+  type TypingState,
+  type TypingTotals,
+} from "./typing";
 import { sanitizeUsername, avatarSeed } from "./username";
 import { isSecureMode } from "../data/supabase";
-import { joinRoomLocal } from "../data/rooms";
+import { joinRoomLocal, closeRoomLocal } from "../data/rooms";
 import { selectAdapter, currentHourBucket, type Entry } from "../data/leaderboard";
 import type { FxEvent } from "../race/RaceCanvas";
 import type { Mood } from "../race/race";
 
 export type Phase = "idle" | "playing" | "results";
+
+/** Each question is played in two typed stages: retype the prompt, then type the answer. */
+export type Stage = "prompt" | "answer";
 
 export interface BoardQuestion {
   id: string;
@@ -16,6 +31,8 @@ export interface BoardQuestion {
   solved: boolean;
   attempts: number;
   hintMask: string | null; // revealed first/last-letter mask, once a hint is spent here
+  typing: TypingState; // typeracer buffer for the prompt, kept per question
+  stage: Stage; // "answer" once the prompt has been retyped in full
 }
 
 export interface LastResult {
@@ -31,7 +48,7 @@ export interface GameState {
   board: BoardQuestion[];
   selected: number | null; // open question index; null = the question board
   solvedCount: number;
-  score: number; // running base score (solved × 100); final run adds the time bonus
+  score: number; // running base score (solved × 100); final run adds the bonuses
   hintsLeft: number;
   mood: Mood;
   lastResult: LastResult | null; // feedback for the currently open question
@@ -41,10 +58,16 @@ export interface GameState {
   rank: number | null;
   totalMs: number;
   secure: boolean;
+  typeTotals: TypingTotals; // session typing accumulator (completed passages only)
+  wpm: number; // session average, refreshed as each passage completes
+  accuracy: number; // 0..1
 }
 
 const MOOD_MS = 1500; // how long the happy/angry face lingers
 const SOLVED_RETURN_MS = 1100; // pause on the solved card before returning to the board
+
+/** Share of a question's kart distance earned by retyping the prompt; the rest lands on a correct answer. */
+export const PROMPT_SHARE = 0.7;
 
 const initial: GameState = {
   phase: "idle",
@@ -63,7 +86,17 @@ const initial: GameState = {
   rank: null,
   totalMs: 0,
   secure: false,
+  typeTotals: emptyTotals,
+  wpm: 0,
+  accuracy: 1,
 };
+
+/** 0..1 kart position: solved questions, plus partial credit for the open one. */
+export function kartProgress(s: GameState): number {
+  const open = s.selected != null ? s.board[s.selected] : null;
+  const partial = open && !open.solved ? PROMPT_SHARE * progressOf(open.typing) : 0;
+  return Math.min(1, (s.solvedCount + partial) / QUESTION_COUNT);
+}
 
 export function useGame() {
   const [state, setState] = useState<GameState>(initial);
@@ -75,6 +108,7 @@ export function useGame() {
   });
 
   const localQs = useRef<Question[]>([]);
+  const roomCode = useRef<string>("");
   const endsAt = useRef(0);
   const fxId = useRef(0);
   const moodTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -103,9 +137,18 @@ export function useGame() {
     finished.current = true;
     clearTimers();
 
+    // The code is spent the moment a run ends — one code hosts exactly one game.
+    try {
+      closeRoomLocal(roomCode.current);
+    } catch {
+      /* ignore */
+    }
+
     const s = stateRef.current;
     const remMs = remaining();
-    const score = runScore(s.solvedCount, remMs);
+    const avgWpm = totalsWpm(s.typeTotals);
+    const acc = totalsAccuracy(s.typeTotals);
+    const score = runScore(s.solvedCount, remMs, avgWpm, acc);
     const totalMs = SESSION_MS - remMs;
 
     let rank: number | null = null;
@@ -119,6 +162,8 @@ export function useGame() {
         totalMs,
         hourBucket: currentHourBucket(),
         createdAt: Date.now(),
+        wpm: Math.round(avgWpm),
+        accuracy: acc,
       };
       void adapter.submit(entry).then(async () => {
         try {
@@ -140,10 +185,13 @@ export function useGame() {
       totalMs,
       remainingMs: remMs,
       rank,
+      wpm: avgWpm,
+      accuracy: acc,
     }));
   }, []);
 
-  // Join the active local room by code and open a fresh 10-minute session.
+  // Join the room by code and open a fresh 10-minute session. The code is burned on
+  // finish, and a name that already raced here is refused.
   const join = useCallback((rawName: string, code: string) => {
     const username = sanitizeUsername(rawName);
     const seed = avatarSeed(username);
@@ -153,7 +201,7 @@ export function useGame() {
 
     let qs: Question[];
     try {
-      qs = joinRoomLocal(code); // throws if no room / wrong code
+      qs = joinRoomLocal(code, username); // throws if no room / wrong code / already used
     } catch (e) {
       setState((st) => ({
         ...st,
@@ -163,6 +211,7 @@ export function useGame() {
       return;
     }
     localQs.current = qs;
+    roomCode.current = code;
     endsAt.current = performance.now() + SESSION_MS;
 
     setState({
@@ -178,6 +227,8 @@ export function useGame() {
         solved: false,
         attempts: 0,
         hintMask: null,
+        typing: newTyping(q.prompt),
+        stage: "prompt" as Stage,
       })),
     });
   }, []);
@@ -194,6 +245,36 @@ export function useGame() {
     setState((s) => ({ ...s, selected: null, lastResult: null }));
   }, []);
 
+  // Typeracer stage: fold each keystroke into the open question's buffer. Completing
+  // the passage banks its typing stats and unlocks the answer field.
+  const typeInput = useCallback((next: string) => {
+    setState((s) => {
+      if (s.phase !== "playing" || s.selected == null) return s;
+      const idx = s.selected;
+      const bq = s.board[idx];
+      if (!bq || bq.solved || bq.stage !== "prompt") return s;
+
+      const now = performance.now();
+      const t = applyInput(bq.typing, next, now);
+      if (t === bq.typing) return s; // rejected (paste / overrun) — no re-render
+
+      const done = isComplete(t);
+      const board = s.board.map((b, i) =>
+        i === idx ? { ...b, typing: t, stage: done ? ("answer" as Stage) : b.stage } : b,
+      );
+      if (!done) return { ...s, board };
+
+      const typeTotals = addPassage(s.typeTotals, t, now);
+      return {
+        ...s,
+        board,
+        typeTotals,
+        wpm: totalsWpm(typeTotals),
+        accuracy: totalsAccuracy(typeTotals),
+      };
+    });
+  }, []);
+
   const submit = useCallback(
     (answer: string) => {
       const s = stateRef.current;
@@ -201,6 +282,7 @@ export function useGame() {
       const idx = s.selected;
       const bq = s.board[idx];
       if (!bq || bq.solved) return;
+      if (bq.stage !== "answer") return; // prompt must be retyped first
       if (!answer.trim()) return;
 
       const q = localQs.current[idx];
@@ -262,10 +344,17 @@ export function useGame() {
     return granted;
   }, []);
 
+  // Back to the start screen. The finished code is dead, so a new one is required.
   const playAgain = useCallback(() => {
     clearTimers();
     finished.current = false;
-    setState(initial);
+    const name = stateRef.current.username;
+    roomCode.current = "";
+    setState({
+      ...initial,
+      username: name,
+      notice: "That room code is spent — ask the host for a fresh code to race again.",
+    });
   }, []);
 
   // Session countdown. Polls 4x a second so the run ends promptly, but only pushes
@@ -287,5 +376,5 @@ export function useGame() {
 
   useEffect(() => clearTimers, []);
 
-  return { state, join, select, backToBoard, submit, useHint, playAgain };
+  return { state, join, select, backToBoard, typeInput, submit, useHint, playAgain };
 }

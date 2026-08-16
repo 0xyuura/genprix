@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useGame } from "./game/useGame";
+import { useGame, kartProgress } from "./game/useGame";
 import { useCaptureGuard } from "./game/useCaptureGuard";
 import { QUESTION_COUNT } from "./game/scoring";
 import RaceCanvas from "./race/RaceCanvas";
@@ -21,7 +21,7 @@ function initialView(): View {
 }
 
 export default function App() {
-  const { state, join, select, backToBoard, submit, useHint, playAgain } = useGame();
+  const { state, join, select, backToBoard, typeInput, submit, useHint, playAgain } = useGame();
   const [view, setView] = useState<View>(initialView);
   // Only guard while a round is actually live — never on the start/results screens.
   const { masked, warning } = useCaptureGuard(view === "game" && state.phase === "playing");
@@ -86,7 +86,7 @@ export default function App() {
       <div className="mx-auto max-w-3xl px-4 py-5">
         <div className="rounded-3xl overflow-hidden border border-white/10 aspect-[16/7] mb-4">
           <RaceCanvas
-            correctCount={state.solvedCount}
+            progress={kartProgress(state)}
             fxEvent={state.fxEvent}
             mood={state.mood}
             className="w-full h-full block"
@@ -99,6 +99,8 @@ export default function App() {
           solvedCount={state.solvedCount}
           total={QUESTION_COUNT}
           hintsLeft={state.hintsLeft}
+          wpm={state.wpm}
+          accuracy={state.accuracy}
         />
 
         <div
@@ -111,6 +113,7 @@ export default function App() {
               index={state.selected}
               hintsLeft={state.hintsLeft}
               lastResult={state.lastResult}
+              onType={typeInput}
               onUseHint={useHint}
               onSubmit={submit}
               onBack={backToBoard}

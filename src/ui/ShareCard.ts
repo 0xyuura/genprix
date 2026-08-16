@@ -8,6 +8,8 @@ export interface ShareData {
   correct: number;
   totalMs: number;
   rank: number | null;
+  wpm: number;
+  accuracy: number; // 0..1
 }
 
 // Render a 1600x900 share card (finish-line scene + stats) and trigger a PNG download.
@@ -62,7 +64,9 @@ export async function downloadShareCard(data: ShareData): Promise<void> {
   };
   stat("CORRECT", `${data.correct}/10`, 62);
   stat("TIME", `${(data.totalMs / 1000).toFixed(1)}s`, 340);
-  if (data.rank) stat("RANK", `#${data.rank}`, 600);
+  stat("TYPING", `${Math.round(data.wpm)} wpm`, 600);
+  stat("ACCURACY", `${Math.round(data.accuracy * 100)}%`, 900);
+  if (data.rank) stat("RANK", `#${data.rank}`, 1180);
 
   ctx.font = "500 30px 'Space Grotesk', sans-serif";
   ctx.fillStyle = hexA(BRAND.ceramic, 0.7);

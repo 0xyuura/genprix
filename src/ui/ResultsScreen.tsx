@@ -22,6 +22,8 @@ export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }:
         correct: state.solvedCount,
         totalMs: state.totalMs,
         rank: state.rank,
+        wpm: state.wpm,
+        accuracy: state.accuracy,
       });
     } finally {
       setSharing(false);
@@ -50,14 +52,22 @@ export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }:
           <Stat label="Correct" value={`${state.solvedCount}/10`} />
           <Stat label="Time" value={`${(state.totalMs / 1000).toFixed(1)}s`} />
           <Stat label="Rank" value={state.rank ? `#${state.rank}` : "—"} />
+          <Stat label="Typing" value={`${Math.round(state.wpm)} wpm`} />
+          <Stat label="Accuracy" value={`${Math.round(state.accuracy * 100)}%`} />
+          <Stat label="Hints left" value={`${state.hintsLeft}`} />
         </div>
       </div>
 
       {state.notice && <p className="mt-3 text-amber text-sm">{state.notice}</p>}
 
+      <p className="mt-3 text-white/50 text-sm">
+        🔒 That room code is now spent — one code, one game. Get a fresh code from the host to race
+        again.
+      </p>
+
       <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
         <button className="btn-arcade" onClick={onPlayAgain}>
-          Play again
+          Enter a new code
         </button>
         <button
           className="btn-arcade !bg-magenta !text-white"

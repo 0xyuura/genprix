@@ -8,15 +8,20 @@ export interface FxEvent {
 }
 
 interface Props {
-  correctCount: number; // 0..10 -> drives progress
+  /**
+   * 0..1 kart position. Solved questions plus partial credit for the passage being
+   * typed right now, so the kart creeps forward with every correct keystroke rather
+   * than only jumping on a solved question.
+   */
+  progress: number;
   fxEvent?: FxEvent | null;
   mood?: Mood; // mochi face: idle / happy / angry
   className?: string;
 }
 
-// Canvas host: owns the rAF loop, eases progress toward correctCount/10, and fires
+// Canvas host: owns the rAF loop, eases the kart toward `progress`, and fires
 // a transient boost/skid effect whenever fxEvent changes.
-function RaceCanvas({ correctCount, fxEvent, mood = "idle", className }: Props) {
+function RaceCanvas({ progress, fxEvent, mood = "idle", className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mascotRef = useRef<MascotImage | null>(null);
   const progressRef = useRef(0);
@@ -39,8 +44,8 @@ function RaceCanvas({ correctCount, fxEvent, mood = "idle", className }: Props) 
   }, []);
 
   useEffect(() => {
-    targetRef.current = Math.max(0, Math.min(1, correctCount / 10));
-  }, [correctCount]);
+    targetRef.current = Math.max(0, Math.min(1, progress));
+  }, [progress]);
 
   useEffect(() => {
     if (!fxEvent || fxEvent.id === lastFxId.current) return;

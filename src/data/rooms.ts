@@ -1,6 +1,11 @@
 // Room service. Secure mode routes to Supabase RPCs; local/demo mode uses localStorage
 // (single-device, for testing before Supabase is configured). Either way a game requires
 // an active room created by the admin.
+//
+// A room code is SINGLE USE: one code buys exactly one game. Once a run finishes the
+// room is marked `done` and the code stops working, and a name that already raced in
+// the room cannot join it a second time. Hosts hand out a fresh code per round, which
+// is what stops anyone from re-running the same questions to farm the leaderboard.
 import { isSecureMode } from "./supabase";
 import { getActiveRoom, joinRoom, createRoom, type AdminQuestion } from "./backend";
 import { type Question } from "../game/quiz";
@@ -16,12 +21,25 @@ import { type Question } from "../game/quiz";
 export const LOCAL_ADMIN_PASSCODE =
   (import.meta.env.VITE_ADMIN_PASSCODE as string | undefined) || "000000";
 
-const LS_ROOM = "ggp_room_v1";
+// v2 adds single-use bookkeeping (status + players); v1 rooms are intentionally dropped.
+const LS_ROOM = "ggp_room_v2";
 
-interface LocalRoom {
+export type RoomStatus = "open" | "done";
+
+export interface LocalRoom {
   code: string;
   questions: Question[];
+  status: RoomStatus;
+  players: string[]; // names that have already raced here
+  createdAt: number;
 }
+
+export const ROOM_USED_MSG =
+  "This code has already been played — one code, one game. Ask the host for a new code.";
+export const ROOM_REPLAY_MSG =
+  "You already raced in this room — one run per code. Ask the host for a new code.";
+export const NO_ROOM_MSG = "No active room — ask the host to open one.";
+export const BAD_CODE_MSG = "Room not found or closed.";
 
 function genCode(): string {
   const s = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no ambiguous 0/O/1/I/L
@@ -30,11 +48,57 @@ function genCode(): string {
   return c;
 }
 
+export const normalizeCode = (c: string): string => (c || "").trim().toUpperCase();
+
+/**
+ * The single-use gate, kept pure so it is unit-testable without a DOM/localStorage.
+ * Returns an error message, or null when the join is allowed.
+ */
+export function roomJoinError(
+  room: LocalRoom | null,
+  code: string,
+  username: string,
+): string | null {
+  if (!room) return NO_ROOM_MSG;
+  if (room.code !== normalizeCode(code)) return BAD_CODE_MSG;
+  if (room.status === "done") return ROOM_USED_MSG;
+  const name = username.trim().toLowerCase();
+  if (room.players.some((p) => p.trim().toLowerCase() === name)) return ROOM_REPLAY_MSG;
+  return null;
+}
+
+/** Record a joining player. Pure — returns the next room record. */
+export function withPlayer(room: LocalRoom, username: string): LocalRoom {
+  return { ...room, players: [...room.players, username] };
+}
+
+/** Retire a room so its code can never start a second game. Pure. */
+export function closedRoom(room: LocalRoom): LocalRoom {
+  return { ...room, status: "done" };
+}
+
 function readLocalRoom(): LocalRoom | null {
   try {
-    return JSON.parse(localStorage.getItem(LS_ROOM) || "null") as LocalRoom | null;
+    const raw = JSON.parse(localStorage.getItem(LS_ROOM) || "null") as LocalRoom | null;
+    if (!raw || !raw.code) return null;
+    // Tolerate records written by an older build of this same version.
+    return {
+      code: raw.code,
+      questions: raw.questions ?? [],
+      status: raw.status === "done" ? "done" : "open",
+      players: Array.isArray(raw.players) ? raw.players : [],
+      createdAt: raw.createdAt ?? 0,
+    };
   } catch {
     return null;
+  }
+}
+
+function writeLocalRoom(room: LocalRoom): void {
+  try {
+    localStorage.setItem(LS_ROOM, JSON.stringify(room));
+  } catch {
+    /* storage full / disabled — the in-memory run continues */
   }
 }
 
@@ -56,7 +120,7 @@ const toAdmin = (qs: Question[]): AdminQuestion[] =>
     explanation: q.explanation,
   }));
 
-/** Is there an active room to join right now? */
+/** Is there an unplayed room to join right now? */
 export async function isRoomOpen(): Promise<boolean> {
   if (isSecureMode()) {
     try {
@@ -65,7 +129,7 @@ export async function isRoomOpen(): Promise<boolean> {
       return false;
     }
   }
-  return readLocalRoom() !== null;
+  return readLocalRoom()?.status === "open";
 }
 
 /** Join a room by code. Secure: returns run handle. Local: returns the room's questions. */
@@ -73,11 +137,20 @@ export async function joinRoomSecure(code: string, username: string, seed: strin
   return joinRoom(code, username, seed);
 }
 
-export function joinRoomLocal(code: string): Question[] {
-  const r = readLocalRoom();
-  if (!r) throw new Error("No active room — ask the admin to open one.");
-  if (r.code !== code.trim().toUpperCase()) throw new Error("Room not found or closed.");
-  return r.questions;
+export function joinRoomLocal(code: string, username: string): Question[] {
+  const room = readLocalRoom();
+  const err = roomJoinError(room, code, username);
+  if (err) throw new Error(err);
+  const joined = withPlayer(room as LocalRoom, username);
+  writeLocalRoom(joined);
+  return joined.questions;
+}
+
+/** Called when a run ends: burns the code so the same room can't host a second game. */
+export function closeRoomLocal(code: string): void {
+  const room = readLocalRoom();
+  if (!room || room.code !== normalizeCode(code)) return;
+  writeLocalRoom(closedRoom(room));
 }
 
 // --- Admin (local/demo) ---
@@ -90,11 +163,20 @@ export function localAdminUnlock(passcode: string): AdminQuestion[] {
 export function createRoomLocal(passcode: string, questions: AdminQuestion[]): { code: string } {
   if (passcode !== LOCAL_ADMIN_PASSCODE) throw new Error("Wrong passcode.");
   const code = genCode();
-  localStorage.setItem(LS_ROOM, JSON.stringify({ code, questions: toQuestions(questions) }));
+  writeLocalRoom({
+    code,
+    questions: toQuestions(questions),
+    status: "open",
+    players: [],
+    createdAt: Date.now(),
+  });
   return { code };
 }
 
-export async function createRoomAny(passcode: string, questions: AdminQuestion[]): Promise<{ code: string }> {
+export async function createRoomAny(
+  passcode: string,
+  questions: AdminQuestion[],
+): Promise<{ code: string }> {
   if (isSecureMode()) {
     const r = await createRoom(passcode, questions);
     return { code: r.code };

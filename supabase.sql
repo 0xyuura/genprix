@@ -80,11 +80,21 @@ create index if not exists scores_hour_rank on scores (hour_bucket, score desc, 
 
 -- Admin-created game rooms. The ACTIVE room is the newest one; its share code is
 -- how players join. Players cannot start a game unless an active room exists.
+--
+-- A code is SINGLE USE: it hosts exactly one game. finish_run flips the room to
+-- 'done', after which the code can never start another round, and join_room also
+-- refuses a name that has already raced in that room. Hosts create a fresh room
+-- per round — that is what stops replaying the same questions to farm the board.
 create table if not exists rooms (
   code       text primary key,
   round      int  not null,
+  status     text not null default 'open' check (status in ('open', 'done')),
+  closed_at  timestamptz,
   created_at timestamptz not null default now()
 );
+-- Upgrade path for databases created before the single-use rule shipped.
+alter table rooms add column if not exists status    text not null default 'open';
+alter table rooms add column if not exists closed_at timestamptz;
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security: default-deny everywhere. Anon reads only via views/config.
@@ -210,7 +220,9 @@ $$;
 create or replace function get_active_room()
 returns jsonb language sql stable
 security definer set search_path = public, pg_temp as $$
-  select jsonb_build_object('open', exists (select 1 from rooms));
+  select jsonb_build_object(
+    'open', exists (select 1 from rooms where status = 'open')
+  );
 $$;
 
 -- Join the active room by its shared code, then start a run for that room's questions.
@@ -232,6 +244,16 @@ begin
   if not found then raise exception 'no active room — ask the admin to open one'; end if;
   if v_active.code <> upper(trim(coalesce(p_code, ''))) then
     raise exception 'room not found or closed';
+  end if;
+  -- Single use: the code dies with the run it hosted.
+  if v_active.status <> 'open' then
+    raise exception 'this code has already been played — ask the host for a new code';
+  end if;
+  if exists (
+    select 1 from runs
+    where round = v_active.round and lower(trim(username)) = lower(v_name)
+  ) then
+    raise exception 'you already raced in this room — ask the host for a new code';
   end if;
   if not exists (select 1 from questions where round = v_active.round and order_idx = 0) then
     raise exception 'room has no questions';
@@ -327,7 +349,9 @@ declare
   v_total  int;
   v_rank   int;
   v_bucket bigint;
-  v_max    int := 3375;  -- MAX_SCORE_PER_ROUND anti-cheat clamp
+  -- Anti-cheat clamp; must track MAX_SCORE in src/game/scoring.ts:
+  -- 10×100 base + 600s×5 time bonus + 200 WPM×2 typing bonus = 4400.
+  v_max    int := 4400;
 begin
   select * into v_run from runs where id = p_run_id and token = p_token for update;
   if not found then raise exception 'invalid run or token'; end if;
@@ -340,6 +364,9 @@ begin
     update runs set finished = true, finished_at = now() where id = v_run.id;
     insert into scores (round, username, avatar_seed, score, correct, total_ms, hour_bucket)
     values (v_run.round, v_run.username, v_run.avatar_seed, v_score, v_run.correct, v_total, v_bucket);
+    -- Burn the room code: one code hosts one game, so no second round can start.
+    update rooms set status = 'done', closed_at = now()
+    where round = v_run.round and status = 'open';
   else
     v_total  := floor(extract(epoch from (v_run.finished_at - v_run.server_started_at)) * 1000)::int;
     v_bucket := floor(extract(epoch from v_run.finished_at) / 3600)::bigint;

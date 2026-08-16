@@ -79,6 +79,11 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
               <span className="text-white/50 text-sm hidden sm:inline">
                 {(e.totalMs / 1000).toFixed(1)}s
               </span>
+              {e.wpm != null && (
+                <span className="text-white/50 text-sm hidden md:inline font-mono tabular-nums">
+                  {e.wpm} wpm
+                </span>
+              )}
               <span className="font-display font-bold text-teal tabular-nums">
                 {e.score.toLocaleString()}
               </span>

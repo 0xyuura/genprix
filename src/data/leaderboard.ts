@@ -21,6 +21,9 @@ export interface Entry {
   totalMs: number;
   hourBucket: number;
   createdAt: number;
+  /** Typing stats for the run. Optional: rows written before the typing race shipped lack them. */
+  wpm?: number;
+  accuracy?: number; // 0..1
 }
 
 export interface LeaderboardAdapter {

@@ -46,21 +46,25 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
         GenLayer <span className="text-magenta">Grand Prix</span>
       </h1>
       <p className="mt-2 text-white/70">
-        Enter the room code from the host, then crack 10 GenLayer questions in any order — every
-        correct answer floors your mochi kart toward the finish. You get 10 minutes and 2 hints;
-        finish fast to top the leaderboard.
+        A typing race on GenLayer trivia. Enter the host's room code, then take the 10 questions in
+        any order: <strong className="text-ceramic">retype each question exactly</strong> to drive
+        your mochi kart forward, then type the answer to bank the checkpoint. 10 minutes, 2 hints —
+        speed, accuracy and correct answers all feed your score.
+      </p>
+      <p className="mt-2 text-white/40 text-sm">
+        One code, one game: your room code is spent as soon as your run ends.
       </p>
 
       <div className="mt-5 rounded-3xl overflow-hidden border border-white/10 aspect-[16/7]">
-        <RaceCanvas correctCount={0} className="w-full h-full block" />
+        <RaceCanvas progress={0} className="w-full h-full block" />
       </div>
 
       {roomOpen === false ? (
         <div className="mt-5 panel p-5 text-center">
           <p className="font-display text-lg text-amber">⏳ No active game right now</p>
           <p className="text-white/60 text-sm mt-1">
-            The host hasn't opened a room yet. Ask the admin to create one, then enter the code
-            here.
+            The last code has been played, or the host hasn't opened a room yet. Each code is good
+            for exactly one game — ask the admin for a fresh one, then enter it here.
           </p>
         </div>
       ) : (
