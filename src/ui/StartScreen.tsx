@@ -79,13 +79,13 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
         GenLayer <span className="text-magenta">Grand Prix</span>
       </h1>
       <p className="mt-2 text-white/70">
-        A typing race on GenLayer trivia. Open the host's invite link, pick a username, and take
+        A typing race on GenLayer trivia. Enter a username and the host's room code, then take
         the 10 questions in any order. Retype each question exactly to drive your mochi kart
         forward, then type the answer to claim the checkpoint.
       </p>
       <p className="mt-2 text-white/40 text-sm">
         You get 10 minutes and 2 hints. Speed, accuracy and correct answers all count toward your
-        score. A room code is good for one run.
+        score. A code lasts 15 minutes and is good for one run.
       </p>
 
       <div className="mt-5 rounded-3xl overflow-hidden border border-white/10 aspect-[16/7]">
