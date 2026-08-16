@@ -111,7 +111,7 @@ function QuestionPanel({
             />
             {erroring && (
               <p className="mt-2 text-xs text-bad font-display">
-                ⌫ Wrong character — backspace to fix it. The kart won't move past a typo.
+                ⌫ Wrong character. Backspace to fix it; the kart won't move past a typo.
               </p>
             )}
           </>
@@ -121,7 +121,9 @@ function QuestionPanel({
       {/* Stage 2 — answer it. Locked until the passage is typed out in full. */}
       <div className={`mt-4 ${stage === "prompt" ? "opacity-40 pointer-events-none" : ""}`}>
         <div className="font-display font-bold text-xs text-white/50 uppercase tracking-wide mb-2">
-          {stage === "prompt" ? "② Answer — locked until the question is typed" : "② Type the answer"}
+          {stage === "prompt"
+            ? "② Answer (locked until the question is typed)"
+            : "② Type the answer"}
         </div>
 
         {!solved && stage === "answer" && (
@@ -135,7 +137,7 @@ function QuestionPanel({
                 className="text-sm text-teal/80 hover:text-teal underline underline-offset-2"
                 onClick={() => onUseHint(index)}
               >
-                Show hint — reveal first &amp; last letter ({hintsLeft} left)
+                Show hint: first and last letter ({hintsLeft} left)
               </button>
             ) : (
               <span className="text-sm text-white/30">No hints left this session</span>
@@ -146,9 +148,6 @@ function QuestionPanel({
         {solved ? (
           <div className="rounded-2xl p-4 bg-good/15 border border-good/40 animate-pop">
             <p className="font-display font-bold text-lg text-good">✅ Correct! +100 pts</p>
-            {lastResult?.explanation && (
-              <p className="mt-1 text-sm text-white/70">{lastResult.explanation}</p>
-            )}
           </div>
         ) : (
           <>
@@ -176,7 +175,7 @@ function QuestionPanel({
             </div>
             {lastResult && !lastResult.correct && (
               <p className="mt-3 text-bad font-display font-bold animate-pop">
-                😡 Not quite — mochi's mad. Try again!
+                😡 Wrong answer. Mochi's mad. Try again!
               </p>
             )}
           </>

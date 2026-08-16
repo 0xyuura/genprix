@@ -14,7 +14,6 @@ const defaultQuestions = (): AdminQuestion[] =>
     prompt: q.prompt,
     accepted: q.accepted,
     hint: q.hint ?? "",
-    explanation: q.explanation,
   }));
 
 export default function AdminPanel({ onBack }: Props) {
@@ -107,21 +106,20 @@ export default function AdminPanel({ onBack }: Props) {
         </button>
       </div>
       <p className="text-xs text-white/40 mb-4">
-        Edit the 10 questions, then create a room. Players retype each question before answering it.
-        <strong className="text-amber"> A code is single use</strong> — it hosts one game and dies
-        when that run ends, so create a fresh room for every round. The leaderboard resets every
-        hour automatically.
+        Edit the 10 questions, then create a room. Players retype each question before they answer
+        it. A code covers one game and expires when that run ends, so create a new room for every
+        round. The leaderboard resets on the hour.
       </p>
 
       {code && (
         <div className="panel p-5 mb-4 text-center animate-pop border-teal/40">
-          <p className="text-white/60 text-sm">Room is live! Share this code:</p>
+          <p className="text-white/60 text-sm">Room is live. Share this code:</p>
           <p className="font-display font-bold text-4xl tracking-[0.3em] text-teal my-2">{code}</p>
           <button className="text-sm text-teal hover:underline" onClick={copy}>
             {copied ? "✓ Link copied" : `Copy invite link (${shareLink})`}
           </button>
           <p className="mt-3 text-xs text-amber">
-            🔒 Single use — this code covers one game only. Create a new room for the next round.
+            Single use. Create a new room for the next round.
           </p>
         </div>
       )}
@@ -152,24 +150,12 @@ export default function AdminPanel({ onBack }: Props) {
                 })
               }
             />
-            <div className="grid sm:grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs text-white/50 mb-1">Hint</label>
-                <input
-                  className="input-arcade !text-base !py-2"
-                  value={q.hint}
-                  onChange={(e) => update(i, { hint: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-white/50 mb-1">Explanation</label>
-                <input
-                  className="input-arcade !text-base !py-2"
-                  value={q.explanation}
-                  onChange={(e) => update(i, { explanation: e.target.value })}
-                />
-              </div>
-            </div>
+            <label className="block text-xs text-white/50 mb-1">Hint</label>
+            <input
+              className="input-arcade !text-base !py-2"
+              value={q.hint}
+              onChange={(e) => update(i, { hint: e.target.value })}
+            />
           </div>
         ))}
       </div>

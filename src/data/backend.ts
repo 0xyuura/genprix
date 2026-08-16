@@ -15,7 +15,6 @@ export interface AnswerResult {
   correct: boolean;
   points_awarded: number;
   correct_answer: string;
-  explanation: string;
   new_score: number;
   correct_count: number;
   index: number;
@@ -34,7 +33,6 @@ export interface AdminQuestion {
   prompt: string;
   accepted: string[];
   hint: string;
-  explanation: string;
 }
 
 async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {

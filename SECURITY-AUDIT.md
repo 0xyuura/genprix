@@ -28,7 +28,7 @@ each attempt server-expensive. Not feasible via the API.
 
 | # | Control | Status | How it's enforced / how to verify |
 |---|---------|--------|-----------------------------------|
-| B1 | Correct answers never sent to the browser | ✅ 🔬 | Anon cannot read `questions` (no policy). Only `questions_public` (id, prompt, hint — **no `accepted`, no `explanation`**) is granted. Verify: `select * from questions` (anon) → denied; `select * from questions_public` → no answer columns. |
+| B1 | Correct answers never sent to the browser | ✅ 🔬 | Anon cannot read `questions` (no policy). Only `questions_public` (id, prompt, hint — **no `accepted`**) is granted. Verify: `select * from questions` (anon) → denied; `select * from questions_public` → no answer columns. |
 | B2 | No client "submit score" path exists | ✅ | There is no `submit_score` RPC and no anon INSERT on `scores`. `SupabaseAdapter.submit()` is a no-op. Grep confirms the client never writes a score. |
 | B3 | Scores written only by `finish_run` | ✅ 🔬 | `scores` has no anon INSERT policy. Verify: `insert into scores(...)` with anon key → denied. Rows appear only after `finish_run`. |
 | B4 | Score computed server-side from server state | ✅ | `answer_question` computes points in SQL from the run's stored streak + server-measured elapsed; the client cannot supply points. |
@@ -46,7 +46,7 @@ each attempt server-expensive. Not feasible via the API.
 | C1 | RLS default-deny on every table | ✅ 🔬 | All 6 tables `enable row level security`; only `config` + the two `_public` views are anon-readable. |
 | C2 | `SECURITY DEFINER` fns pin `search_path` | ✅ | Every RPC sets `search_path = public, pg_temp` (blocks search_path injection). |
 | C3 | Least privilege on functions | ✅ | Internal fns (`normalize_text`, `answer_matches`, `admin_verify`, `admin_check_lockout`) are `revoke`d from public; only the 6 intended RPCs are granted to `anon`. |
-| C4 | Input validation | ✅ | Username length 2–20 (client + `start_run`); answer capped at 100 chars (client); `admin_publish_questions` validates the jsonb shape (array, prompt/explanation present, ≥1 accepted). |
+| C4 | Input validation | ✅ | Username length 2–20 (client + `start_run`); answer capped at 100 chars (client); `admin_publish_questions` validates the jsonb shape (array, prompt present, ≥1 accepted). |
 
 ## D. Residual / accepted risks
 

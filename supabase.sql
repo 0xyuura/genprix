@@ -32,7 +32,7 @@ create table if not exists admin_attempts (
   created_at timestamptz not null default now()
 );
 
--- Private: full questions incl. hidden answers/explanations.
+-- Private: full questions incl. the hidden accepted answers.
 create table if not exists questions (
   round       int  not null,
   order_idx   int  not null,
@@ -40,10 +40,12 @@ create table if not exists questions (
   prompt      text not null,
   accepted    text[] not null,
   hint        text,
-  explanation text not null,
   primary key (round, order_idx),
   unique (round, qid)
 );
+-- Upgrade from an earlier schema: the admin no longer writes per-question
+-- explanations, so the column and its not-null constraint have to go.
+alter table questions drop column if exists explanation;
 
 -- Private: in-flight run state. Token gates every answer/finish call.
 create table if not exists runs (
@@ -329,7 +331,6 @@ begin
     'correct', v_correct,
     'points_awarded', v_pts,
     'correct_answer', v_q.accepted[1],
-    'explanation', v_q.explanation,
     'new_score', v_run.score,
     'correct_count', v_run.correct,
     'index', v_run.current_index,
@@ -395,7 +396,7 @@ begin
   select active_round into v_round from config where id = 1;
   select coalesce(jsonb_agg(jsonb_build_object(
            'id', qid, 'prompt', prompt, 'accepted', accepted,
-           'hint', coalesce(hint, ''), 'explanation', explanation
+           'hint', coalesce(hint, '')
          ) order by order_idx), '[]'::jsonb)
     into v_out from questions where round = v_round;
   return v_out;
@@ -421,7 +422,6 @@ begin
   -- validate each element
   for v_elem in select * from jsonb_array_elements(p_questions) loop
     if coalesce(v_elem->>'prompt', '') = '' then raise exception 'each question needs a prompt'; end if;
-    if coalesce(v_elem->>'explanation', '') = '' then raise exception 'each question needs an explanation'; end if;
     if jsonb_typeof(v_elem->'accepted') <> 'array'
        or jsonb_array_length(v_elem->'accepted') < 1 then
       raise exception 'each question needs at least one accepted answer';
@@ -434,15 +434,14 @@ begin
   delete from questions where round = v_target;
 
   for v_elem in select * from jsonb_array_elements(p_questions) loop
-    insert into questions (round, order_idx, qid, prompt, accepted, hint, explanation)
+    insert into questions (round, order_idx, qid, prompt, accepted, hint)
     values (
       v_target,
       v_i,
       coalesce(nullif(v_elem->>'id', ''), 'q' || (v_i + 1)),
       v_elem->>'prompt',
       array(select jsonb_array_elements_text(v_elem->'accepted')),
-      nullif(v_elem->>'hint', ''),
-      v_elem->>'explanation'
+      nullif(v_elem->>'hint', '')
     );
     v_i := v_i + 1;
   end loop;
@@ -475,7 +474,6 @@ begin
   if v_len < 1 or v_len > 20 then raise exception 'questions must contain 1..20 items'; end if;
   for v_elem in select * from jsonb_array_elements(p_questions) loop
     if coalesce(v_elem->>'prompt', '') = '' then raise exception 'each question needs a prompt'; end if;
-    if coalesce(v_elem->>'explanation', '') = '' then raise exception 'each question needs an explanation'; end if;
     if jsonb_typeof(v_elem->'accepted') <> 'array'
        or jsonb_array_length(v_elem->'accepted') < 1 then
       raise exception 'each question needs at least one accepted answer';
@@ -485,14 +483,13 @@ begin
   select active_round + 1 into v_round from config where id = 1;
   delete from questions where round = v_round;
   for v_elem in select * from jsonb_array_elements(p_questions) loop
-    insert into questions (round, order_idx, qid, prompt, accepted, hint, explanation)
+    insert into questions (round, order_idx, qid, prompt, accepted, hint)
     values (
       v_round, v_i,
       coalesce(nullif(v_elem->>'id', ''), 'q' || (v_i + 1)),
       v_elem->>'prompt',
       array(select jsonb_array_elements_text(v_elem->'accepted')),
-      nullif(v_elem->>'hint', ''),
-      v_elem->>'explanation'
+      nullif(v_elem->>'hint', '')
     );
     v_i := v_i + 1;
   end loop;

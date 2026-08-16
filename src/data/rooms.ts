@@ -35,10 +35,10 @@ export interface LocalRoom {
 }
 
 export const ROOM_USED_MSG =
-  "This code has already been played — one code, one game. Ask the host for a new code.";
+  "This code has already been played. Ask the host for a new one.";
 export const ROOM_REPLAY_MSG =
-  "You already raced in this room — one run per code. Ask the host for a new code.";
-export const NO_ROOM_MSG = "No active room — ask the host to open one.";
+  "You already raced with this code. Ask the host for a new one.";
+export const NO_ROOM_MSG = "No active room. Ask the host to open one.";
 export const BAD_CODE_MSG = "Room not found or closed.";
 
 function genCode(): string {
@@ -108,7 +108,6 @@ const toQuestions = (qs: AdminQuestion[]): Question[] =>
     prompt: q.prompt,
     accepted: q.accepted,
     hint: q.hint || undefined,
-    explanation: q.explanation,
   }));
 
 const toAdmin = (qs: Question[]): AdminQuestion[] =>
@@ -117,7 +116,6 @@ const toAdmin = (qs: Question[]): AdminQuestion[] =>
     prompt: q.prompt,
     accepted: q.accepted,
     hint: q.hint ?? "",
-    explanation: q.explanation,
   }));
 
 /** Is there an unplayed room to join right now? */

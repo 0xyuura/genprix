@@ -39,7 +39,7 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
       <div className="flex items-center justify-between mb-2">
-        <h2 className="font-display font-bold text-3xl text-ceramic">🏆 Leaderboard</h2>
+        <h2 className="font-display font-bold text-3xl text-ceramic">Leaderboard</h2>
         <button className="text-teal hover:underline" onClick={onBack}>
           ← Back
         </button>
@@ -55,7 +55,7 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
       {error && <p className="text-bad">{error}</p>}
       {!entries && !error && <p className="text-white/50">Loading…</p>}
       {entries && entries.length === 0 && (
-        <p className="text-white/50">No racers this hour yet — be the first!</p>
+        <p className="text-white/50">No racers this hour yet. Be the first.</p>
       )}
 
       <ol className="space-y-2">

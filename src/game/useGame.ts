@@ -38,7 +38,6 @@ export interface BoardQuestion {
 export interface LastResult {
   correct: boolean;
   correctAnswer: string;
-  explanation: string;
 }
 
 export interface GameState {
@@ -300,7 +299,7 @@ export function useGame() {
           solvedCount: newSolved,
           score: newSolved * 100,
           fxEvent,
-          lastResult: { correct: true, correctAnswer: q.accepted[0], explanation: q.explanation },
+          lastResult: { correct: true, correctAnswer: q.accepted[0] },
         }));
         setMood("happy");
 
@@ -319,7 +318,7 @@ export function useGame() {
           ...st,
           board,
           fxEvent,
-          lastResult: { correct: false, correctAnswer: "", explanation: "" },
+          lastResult: { correct: false, correctAnswer: "" },
         }));
         setMood("angry");
       }
@@ -353,7 +352,7 @@ export function useGame() {
     setState({
       ...initial,
       username: name,
-      notice: "That room code is spent — ask the host for a fresh code to race again.",
+      notice: "That code is used up. Ask the host for a fresh one to race again.",
     });
   }, []);
 

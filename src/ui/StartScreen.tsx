@@ -46,13 +46,13 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
         GenLayer <span className="text-magenta">Grand Prix</span>
       </h1>
       <p className="mt-2 text-white/70">
-        A typing race on GenLayer trivia. Enter the host's room code, then take the 10 questions in
-        any order: <strong className="text-ceramic">retype each question exactly</strong> to drive
-        your mochi kart forward, then type the answer to bank the checkpoint. 10 minutes, 2 hints —
-        speed, accuracy and correct answers all feed your score.
+        A typing race on GenLayer trivia. Enter the host's room code and take the 10 questions in
+        any order. Retype each question exactly to drive your mochi kart forward, then type the
+        answer to claim the checkpoint.
       </p>
       <p className="mt-2 text-white/40 text-sm">
-        One code, one game: your room code is spent as soon as your run ends.
+        You get 10 minutes and 2 hints. Speed, accuracy and correct answers all count toward your
+        score. A room code is good for one run.
       </p>
 
       <div className="mt-5 rounded-3xl overflow-hidden border border-white/10 aspect-[16/7]">
@@ -61,10 +61,10 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
 
       {roomOpen === false ? (
         <div className="mt-5 panel p-5 text-center">
-          <p className="font-display text-lg text-amber">⏳ No active game right now</p>
+          <p className="font-display text-lg text-amber">No game running right now</p>
           <p className="text-white/60 text-sm mt-1">
-            The last code has been played, or the host hasn't opened a room yet. Each code is good
-            for exactly one game — ask the admin for a fresh one, then enter it here.
+            Either the last code has been played or the host hasn't opened a room yet. Ask the admin
+            for a fresh code, then enter it here.
           </p>
         </div>
       ) : (

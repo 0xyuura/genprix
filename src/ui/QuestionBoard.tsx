@@ -16,8 +16,8 @@ function QuestionBoard({ board, onSelect }: Props) {
     <div className="panel p-4 sm:p-5">
       <p className="font-display font-bold text-lg text-ceramic mb-1">Pick a question</p>
       <p className="text-xs text-white/50 mb-4">
-        Take them in any order. Retype the question to move your mochi, then answer it to bank the
-        checkpoint. Half-typed questions keep their progress — beat the clock.
+        Take them in any order. Retype the question to move your mochi, then answer it to claim the
+        checkpoint. Half-typed questions keep their progress.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {board.map((q, i) => (
@@ -38,7 +38,7 @@ function QuestionBoard({ board, onSelect }: Props) {
               ) : q.attempts > 0 ? (
                 <span className="text-bad text-xs">✗ {q.attempts} tr{q.attempts === 1 ? "y" : "ies"}</span>
               ) : q.stage === "answer" ? (
-                <span className="text-amber text-xs">⌨ typed — answer it →</span>
+                <span className="text-amber text-xs">⌨ typed · answer it →</span>
               ) : q.typing.typed.length > 0 ? (
                 <span className="text-amber text-xs">⌨ {Math.round(progressOf(q.typing) * 100)}% typed</span>
               ) : (

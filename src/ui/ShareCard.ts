@@ -70,7 +70,7 @@ export async function downloadShareCard(data: ShareData): Promise<void> {
 
   ctx.font = "500 30px 'Space Grotesk', sans-serif";
   ctx.fillStyle = hexA(BRAND.ceramic, 0.7);
-  ctx.fillText("Play at GenLayer Grand Prix — race the mochi, learn GenLayer.", 60, 840);
+  ctx.fillText("Play at GenLayer Grand Prix. Race the mochi, learn GenLayer.", 60, 840);
 
   const blob: Blob = await new Promise((res) => canvas.toBlob((b) => res(b!), "image/png"));
   const url = URL.createObjectURL(blob);

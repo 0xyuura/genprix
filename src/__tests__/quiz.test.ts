@@ -56,10 +56,9 @@ describe("DEFAULT_QUESTIONS", () => {
   it("has exactly 10 questions", () => {
     expect(DEFAULT_QUESTIONS).toHaveLength(10);
   });
-  it("every question has a prompt, explanation, and non-empty accepted list", () => {
+  it("every question has a prompt and a non-empty accepted list", () => {
     for (const q of DEFAULT_QUESTIONS) {
       expect(q.prompt.length).toBeGreaterThan(0);
-      expect(q.explanation.length).toBeGreaterThan(0);
       expect(q.accepted.length).toBeGreaterThan(0);
     }
   });

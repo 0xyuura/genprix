@@ -34,11 +34,11 @@ export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }:
     <div className="mx-auto max-w-xl px-4 py-8 text-center">
       <Avatar seed={state.avatarSeed} name={state.username} size={72} />
       <h2 className="mt-3 font-display font-bold text-3xl text-ceramic">
-        {perfect ? "🏁 Perfect run!" : "Race complete!"}
+        {perfect ? "Perfect run!" : "Race complete!"}
       </h2>
       <p className="text-white/60">
         {perfect
-          ? "You crossed the finish line — a true GenLayer maxi."
+          ? "All 10 checkpoints, no misses. A true GenLayer maxi."
           : `Your mochi reached checkpoint ${state.solvedCount}/10.`}
       </p>
 
@@ -61,8 +61,7 @@ export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }:
       {state.notice && <p className="mt-3 text-amber text-sm">{state.notice}</p>}
 
       <p className="mt-3 text-white/50 text-sm">
-        🔒 That room code is now spent — one code, one game. Get a fresh code from the host to race
-        again.
+        That room code is used up. Ask the host for a fresh one to race again.
       </p>
 
       <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">

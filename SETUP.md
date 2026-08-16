@@ -62,9 +62,8 @@ VITE_SUPABASE_ANON_KEY=YOUR-ANON-PUBLIC-KEY
   quiz is open.
 
 ## Security notes
-- Correct answers and explanations are **never** sent to the browser in secure mode —
-  they live in the `questions` table (no anon read) and are checked inside the
-  `answer_question` RPC.
+- Correct answers are **never** sent to the browser in secure mode. They live in the
+  `questions` table (no anon read) and are checked inside the `answer_question` RPC.
 - Scores are computed and written **only** server-side by `finish_run`; the client
   cannot submit a score. Answer timing is measured by the server, so speed bonuses
   can't be faked. Scores are clamped to the maximum possible (3375).
