@@ -15,15 +15,17 @@ import {
   withPlayer,
   type LocalRoom,
 } from "../data/rooms";
-import { ROOM_PATH, encodeRoomKey } from "../data/roomkey";
+import { ROOM_PATH, encodeRoomKey, newRoomCode } from "../data/roomkey";
 import { DEFAULT_QUESTIONS } from "../game/quiz";
 
+// A room made just now. "ABC123" predates codes carrying their own clock, so
+// this also covers the fallback to the device's own record of when it appeared.
 const room = (over: Partial<LocalRoom> = {}): LocalRoom => ({
   code: "ABC123",
   questions: [],
   status: "open",
   players: [],
-  createdAt: 0,
+  createdAt: Date.now(),
   ...over,
 });
 
@@ -81,7 +83,8 @@ describe("a guest joining from an invite link", () => {
     }
   }
 
-  const hostKey = () => encodeRoomKey({ code: "ABC123", questions: DEFAULT_QUESTIONS });
+  const hostCode = newRoomCode();
+  const hostKey = () => encodeRoomKey({ code: hostCode, questions: DEFAULT_QUESTIONS });
   const hostPath = () => `${ROOM_PATH}${hostKey()}`;
 
   beforeEach(() => {
@@ -90,14 +93,14 @@ describe("a guest joining from an invite link", () => {
   });
 
   it("has no room at all before the link is opened", () => {
-    expect(() => joinRoomLocal("ABC123", "guest")).toThrow(NO_ROOM_MSG);
+    expect(() => joinRoomLocal(hostCode, "guest")).toThrow(NO_ROOM_MSG);
   });
 
   it("adopts the room from the link and then joins on a username alone", () => {
     const adopted = adoptRoomFromUrl("", hostPath());
-    expect(adopted?.code).toBe("ABC123");
+    expect(adopted?.code).toBe(hostCode);
     expect(adopted?.status).toBe("open");
-    expect(joinRoomLocal("ABC123", "guest")).toHaveLength(DEFAULT_QUESTIONS.length);
+    expect(joinRoomLocal(hostCode, "guest")).toHaveLength(DEFAULT_QUESTIONS.length);
   });
 
   it("also accepts the link pasted straight into the code box", () => {
@@ -115,10 +118,10 @@ describe("a guest joining from an invite link", () => {
   it("re-opening the link does not resurrect a code this device already played", () => {
     const path = hostPath();
     adoptRoomFromUrl("", path);
-    joinRoomLocal("ABC123", "guest");
-    closeRoomLocal("ABC123");
+    joinRoomLocal(hostCode, "guest");
+    closeRoomLocal(hostCode);
     expect(adoptRoomFromUrl("", path)?.status).toBe("done");
-    expect(() => joinRoomLocal("ABC123", "guest")).toThrow(ROOM_USED_MSG);
+    expect(() => joinRoomLocal(hostCode, "guest")).toThrow(ROOM_USED_MSG);
   });
 
   it("ignores a URL with no room key, leaving the normal path alone", () => {
@@ -128,7 +131,7 @@ describe("a guest joining from an invite link", () => {
 
   it("hands the host a link that carries the room back out again", () => {
     adoptRoomFromUrl("", hostPath());
-    const link = inviteLinkLocal("https://genprix.vercel.app", "ABC123");
+    const link = inviteLinkLocal("https://genprix.vercel.app", hostCode);
     expect(link).toContain(ROOM_PATH);
     expect(link!.length).toBeLessThan(45); // short enough to paste anywhere
     expect(inviteLinkLocal("https://genprix.vercel.app", "NOPE99")).toBeNull();

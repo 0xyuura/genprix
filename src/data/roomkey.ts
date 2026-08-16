@@ -38,6 +38,85 @@ const KIND_CUSTOM = "1";
 
 const CODE_RE = /^[A-Z0-9]{4,12}$/;
 
+// Unambiguous alphabet: no 0/1/I/L/O, so nothing is misread when a code is
+// read out loud or copied off a screen.
+const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const TIME_LEN = 5; // minutes since CODE_EPOCH; 31^5 minutes is ~54 years
+const RANDOM_LEN = 2;
+const CHECK_LEN = 2;
+export const CODE_LEN = TIME_LEN + RANDOM_LEN + CHECK_LEN;
+
+/** Codes count minutes from here, so they stay short. */
+export const CODE_EPOCH_MS = Date.UTC(2026, 0, 1);
+
+const toBase31 = (n: number, len: number): string => {
+  let out = "";
+  for (let i = 0; i < len; i++) {
+    out = ALPHABET[n % ALPHABET.length] + out;
+    n = Math.floor(n / ALPHABET.length);
+  }
+  return out;
+};
+
+const fromBase31 = (s: string): number | null => {
+  let n = 0;
+  for (const ch of s) {
+    const i = ALPHABET.indexOf(ch);
+    if (i < 0) return null;
+    n = n * ALPHABET.length + i;
+  }
+  return n;
+};
+
+/**
+ * Two trailing characters derived from the rest of the code. Without them every
+ * string starting with "0" would be a valid room for the built-in quiz, and
+ * anyone could start a game the host never opened. This is obscurity, not
+ * security — the rule is in the bundle like everything else in demo mode — but
+ * it takes guessing a room from trivial to about a thousand tries, and it
+ * catches a mistyped character.
+ */
+function checkChars(body: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < body.length; i++) {
+    h ^= body.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  let out = "";
+  for (let i = 0; i < CHECK_LEN; i++) {
+    out += ALPHABET[h % ALPHABET.length];
+    h = Math.floor(h / ALPHABET.length);
+  }
+  return out;
+}
+
+/**
+ * A fresh room code, carrying its own birth minute.
+ *
+ * The time has to live in the code itself: a guest's device has no way to ask
+ * when the room was made, and trusting the moment they first opened it would
+ * mean a code that never expires as long as it keeps finding new phones.
+ */
+export function newRoomCode(now = Date.now()): string {
+  const minutes = Math.max(0, Math.floor((now - CODE_EPOCH_MS) / 60_000));
+  let random = "";
+  for (let i = 0; i < RANDOM_LEN; i++) {
+    random += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+  }
+  const body = toBase31(minutes, TIME_LEN) + random;
+  return body + checkChars(body);
+}
+
+/** When a code was issued, or null if it is not one of ours. */
+export function codeIssuedAt(code: string): number | null {
+  const c = (code || "").trim().toUpperCase();
+  if (c.length !== CODE_LEN) return null;
+  const body = c.slice(0, -CHECK_LEN);
+  if (c.slice(-CHECK_LEN) !== checkChars(body)) return null;
+  const minutes = fromBase31(body.slice(0, TIME_LEN));
+  return minutes === null ? null : CODE_EPOCH_MS + minutes * 60_000;
+}
+
 export interface RoomKeyData {
   code: string;
   questions: Question[];
@@ -78,17 +157,29 @@ function fromBase64Url(s: string): string {
   return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
 }
 
+/** Which questions differ from the bundled set — the only ones a link must carry. */
+export function changedFromDefaults(questions: Question[]): number[] {
+  const changed: number[] = [];
+  for (let i = 0; i < questions.length; i++) {
+    if (!sameQuestion(questions[i], DEFAULT_QUESTIONS[i])) changed.push(i);
+  }
+  return changed;
+}
+
+/** True when a question set is the bundled one, so a link needs no payload at all. */
+export const isDefaultSet = (questions: Question[]): boolean =>
+  questions.length === DEFAULT_QUESTIONS.length && changedFromDefaults(questions).length === 0;
+
 /** Pack a room into the shortest key that can rebuild it. */
 export function encodeRoomKey(data: RoomKeyData): string {
   const code = (data.code || "").toUpperCase();
   const qs = data.questions;
-
-  const changed: number[] = [];
-  for (let i = 0; i < qs.length; i++) {
-    if (!sameQuestion(qs[i], DEFAULT_QUESTIONS[i])) changed.push(i);
+  const changed = changedFromDefaults(qs);
+  // Nothing edited and nothing added or removed: the bundled set will do, so the
+  // key is short enough to read out loud.
+  if (changed.length === 0 && qs.length === DEFAULT_QUESTIONS.length) {
+    return KIND_DEFAULT + code;
   }
-  // Nothing edited and nothing added or removed: the bundled set will do.
-  if (changed.length === 0 && qs.length === DEFAULT_QUESTIONS.length) return KIND_DEFAULT + code;
 
   const records = changed.map((i) => {
     const q = qs[i];
@@ -108,7 +199,9 @@ function decodeV2(key: string): RoomKeyData | null {
 
   if (kind === KIND_DEFAULT) {
     const code = key.slice(1).toUpperCase();
-    return CODE_RE.test(code) ? { code, questions: DEFAULT_QUESTIONS } : null;
+    // The code validates itself, so an invented one cannot open a room.
+    if (codeIssuedAt(code) === null) return null;
+    return { code, questions: DEFAULT_QUESTIONS };
   }
   if (kind !== KIND_CUSTOM) return null;
 

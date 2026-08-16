@@ -9,8 +9,11 @@ import {
   roomKeyFromLocation,
 } from "../data/roomkey";
 import { DEFAULT_QUESTIONS, type Question } from "../game/quiz";
+import { newRoomCode } from "../data/roomkey";
 
 const ORIGIN = "https://genprix.vercel.app";
+// Default-set keys carry a real issued code; custom keys may use any label.
+const ISSUED = newRoomCode();
 
 /** The bundled set with question `i` swapped for the host's own. */
 const edited = (i: number, q: Partial<Question> = {}): Question[] =>
@@ -28,9 +31,10 @@ const edited = (i: number, q: Partial<Question> = {}): Question[] =>
 
 describe("link length", () => {
   it("keeps an unedited quiz down to a code-sized link", () => {
-    const link = inviteLink(ORIGIN, { code: "AB4K7Q", questions: DEFAULT_QUESTIONS });
-    expect(link).toBe(`${ORIGIN}${ROOM_PATH}0AB4K7Q`);
-    expect(link.length).toBeLessThan(40);
+    const link = inviteLink(ORIGIN, { code: ISSUED, questions: DEFAULT_QUESTIONS });
+    // "0" + a code that carries its own creation minute and check characters.
+    expect(link).toBe(`${ORIGIN}${ROOM_PATH}0${ISSUED}`);
+    expect(link.length).toBeLessThan(42);
   });
 
   it("charges an edited quiz for the edits only, not the whole set", () => {
@@ -46,8 +50,8 @@ describe("link length", () => {
 
 describe("encode/decode round trip", () => {
   it("rebuilds the bundled set from the short key", () => {
-    const back = decodeRoomKey(encodeRoomKey({ code: "AB4K7Q", questions: DEFAULT_QUESTIONS }));
-    expect(back?.code).toBe("AB4K7Q");
+    const back = decodeRoomKey(encodeRoomKey({ code: ISSUED, questions: DEFAULT_QUESTIONS }));
+    expect(back?.code).toBe(ISSUED);
     expect(back?.questions).toEqual(DEFAULT_QUESTIONS);
   });
 
@@ -75,9 +79,10 @@ describe("encode/decode round trip", () => {
   });
 
   it("uppercases the code so a lowercased link still matches", () => {
-    expect(decodeRoomKey(encodeRoomKey({ code: "ab4k7q", questions: DEFAULT_QUESTIONS }))?.code).toBe(
-      "AB4K7Q",
-    );
+    expect(
+      decodeRoomKey(encodeRoomKey({ code: ISSUED.toLowerCase(), questions: DEFAULT_QUESTIONS }))
+        ?.code,
+    ).toBe(ISSUED);
   });
 
   it("produces a URL-safe key", () => {
@@ -115,6 +120,15 @@ describe("decodeRoomKey rejects junk", () => {
   it("returns null for a key whose code is not code-shaped", () => {
     expect(decodeRoomKey("0AB")).toBeNull(); // too short
     expect(decodeRoomKey("0AB-K7Q")).toBeNull(); // not alphanumeric
+  });
+
+  // Otherwise any string starting with "0" would open a game the host never ran.
+  it("refuses an invented code that carries the wrong check characters", () => {
+    const real = encodeRoomKey({ code: ISSUED, questions: DEFAULT_QUESTIONS });
+    expect(decodeRoomKey(real)).not.toBeNull();
+    expect(decodeRoomKey(real.slice(0, -2) + "ZZ")).toBeNull();
+    expect(decodeRoomKey("0ZZZZZZ9ZZ")).toBeNull();
+    expect(decodeRoomKey("0AB4K7Q")).toBeNull(); // not a code this app issued
   });
 });
 

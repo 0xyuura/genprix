@@ -8,8 +8,18 @@
 // is what stops anyone from re-running the same questions to farm the leaderboard.
 import { isSecureMode } from "./supabase";
 import { getActiveRoom, joinRoom, createRoom, type AdminQuestion } from "./backend";
-import { type Question } from "../game/quiz";
-import { inviteLink, roomKeyFromInput, roomKeyFromLocation, type RoomKeyData } from "./roomkey";
+import { DEFAULT_QUESTIONS, type Question } from "../game/quiz";
+import {
+  changedFromDefaults,
+  codeIssuedAt,
+  encodeRoomKey,
+  inviteLink,
+  isDefaultSet,
+  newRoomCode,
+  roomKeyFromInput,
+  roomKeyFromLocation,
+  type RoomKeyData,
+} from "./roomkey";
 
 // Local/demo admin passcode. Set VITE_ADMIN_PASSCODE to override the demo default.
 //
@@ -33,22 +43,28 @@ export interface LocalRoom {
   status: RoomStatus;
   players: string[]; // names that have already raced here
   createdAt: number;
+  /**
+   * The host published the bundled questions untouched. Recorded because the
+   * wording of those questions changes between builds: without this, reopening
+   * the admin panel would reload the OLD copy, every reworded question would
+   * count as an edit, and the invite link would balloon for a host who never
+   * edited anything.
+   */
+  fromDefaults?: boolean;
 }
 
+/** A code is only good for 15 minutes after the host created it. */
+export const ROOM_TTL_MS = 15 * 60 * 1000;
+
+export const ROOM_EXPIRED_MSG =
+  "This code has expired — codes last 15 minutes. Ask the host for a new one.";
 export const ROOM_USED_MSG =
   "This code has already been played. Ask the host for a new one.";
 export const ROOM_REPLAY_MSG =
   "You already raced with this code. Ask the host for a new one.";
 export const NO_ROOM_MSG = "No active room. Ask the host to open one.";
 export const BAD_CODE_MSG =
-  "That code was created on another device. Ask the host for the invite link.";
-
-function genCode(): string {
-  const s = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no ambiguous 0/O/1/I/L
-  let c = "";
-  for (let i = 0; i < 6; i++) c += s[Math.floor(Math.random() * s.length)];
-  return c;
-}
+  "No game open under that code. Check it with the host, or use their invite link.";
 
 export const normalizeCode = (c: string): string => (c || "").trim().toUpperCase();
 
@@ -60,14 +76,30 @@ export function roomJoinError(
   room: LocalRoom | null,
   code: string,
   username: string,
+  now = Date.now(),
 ): string | null {
   if (!room) return NO_ROOM_MSG;
   if (room.code !== normalizeCode(code)) return BAD_CODE_MSG;
   if (room.status === "done") return ROOM_USED_MSG;
+  if (expiresAt(room) <= now) return ROOM_EXPIRED_MSG;
   const name = username.trim().toLowerCase();
   if (room.players.some((p) => p.trim().toLowerCase() === name)) return ROOM_REPLAY_MSG;
   return null;
 }
+
+/**
+ * When a room stops working. Read from the code itself, because every device
+ * has to agree on the deadline and only the code crossed the gap between them.
+ * Codes from before the clock was baked in fall back to when this device first
+ * saw the room.
+ */
+export function expiresAt(room: LocalRoom): number {
+  return (codeIssuedAt(room.code) ?? room.createdAt) + ROOM_TTL_MS;
+}
+
+/** Milliseconds left on a room, floored at zero. */
+export const timeLeftOn = (room: LocalRoom, now = Date.now()): number =>
+  Math.max(0, expiresAt(room) - now);
 
 /** Record a joining player. Pure — returns the next room record. */
 export function withPlayer(room: LocalRoom, username: string): LocalRoom {
@@ -90,6 +122,7 @@ function readLocalRoom(): LocalRoom | null {
       status: raw.status === "done" ? "done" : "open",
       players: Array.isArray(raw.players) ? raw.players : [],
       createdAt: raw.createdAt ?? 0,
+      fromDefaults: raw.fromDefaults === true,
     };
   } catch {
     return null;
@@ -164,7 +197,8 @@ export async function isRoomOpen(): Promise<boolean> {
       return false;
     }
   }
-  return readLocalRoom()?.status === "open";
+  const room = readLocalRoom();
+  return !!room && room.status === "open" && timeLeftOn(room) > 0;
 }
 
 /** Join a room by code. Secure: returns run handle. Local: returns the room's questions. */
@@ -191,6 +225,22 @@ export function activeRoomLocal(): LocalRoom | null {
   return readLocalRoom();
 }
 
+/**
+ * The code a host hands out. It is the room key, not just a label: with the
+ * built-in questions that is seven characters someone can type on any device,
+ * which is the whole point — a plain label would mean nothing on a phone that
+ * has never seen this room. Editing questions makes it long, because the
+ * questions themselves have to travel.
+ */
+export function shareCodeLocal(code: string): string | null {
+  const room = readLocalRoom();
+  if (!room || room.code !== normalizeCode(code)) return null;
+  return encodeRoomKey({ code: room.code, questions: room.questions });
+}
+
+/** Is this share code short enough to read out or type in? */
+export const isTypableCode = (shareCode: string): boolean => shareCode.length <= 12;
+
 /** The share link for a local room: the room travels inside it. */
 export function inviteLinkLocal(origin: string, code: string): string | null {
   const room = readLocalRoom();
@@ -214,20 +264,30 @@ export function closeRoomLocal(code: string): void {
 export function localAdminUnlock(passcode: string): AdminQuestion[] {
   if (passcode !== LOCAL_ADMIN_PASSCODE) throw new Error("Wrong passcode.");
   const r = readLocalRoom();
-  return r ? toAdmin(r.questions) : [];
+  if (!r) return [];
+  // A host who published the bundled set gets today's wording back, not the copy
+  // frozen into their last room. Anything they actually edited is theirs to keep.
+  return toAdmin(r.fromDefaults ? DEFAULT_QUESTIONS : r.questions);
 }
 
 export function createRoomLocal(passcode: string, questions: AdminQuestion[]): { code: string } {
   if (passcode !== LOCAL_ADMIN_PASSCODE) throw new Error("Wrong passcode.");
-  const code = genCode();
+  const code = newRoomCode();
+  const qs = toQuestions(questions);
   writeLocalRoom({
     code,
-    questions: toQuestions(questions),
+    questions: qs,
     status: "open",
     players: [],
     createdAt: Date.now(),
+    fromDefaults: isDefaultSet(qs),
   });
   return { code };
+}
+
+/** How many questions a link would have to carry. 0 means the shortest link. */
+export function editedQuestionCount(questions: AdminQuestion[]): number {
+  return changedFromDefaults(toQuestions(questions)).length;
 }
 
 export async function createRoomAny(

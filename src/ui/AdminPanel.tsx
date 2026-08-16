@@ -1,8 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { isSecureMode } from "../data/supabase";
 import { adminGetQuestions, type AdminQuestion } from "../data/backend";
-import { createRoomAny, inviteLinkLocal, localAdminUnlock } from "../data/rooms";
+import {
+  activeRoomLocal,
+  createRoomAny,
+  editedQuestionCount,
+  inviteLinkLocal,
+  isTypableCode,
+  localAdminUnlock,
+  shareCodeLocal,
+  timeLeftOn,
+} from "../data/rooms";
 import { DEFAULT_QUESTIONS } from "../game/quiz";
+
+const fmtLeft = (ms: number): string => {
+  const total = Math.ceil(ms / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+};
 
 interface Props {
   onBack: () => void;
@@ -23,9 +37,24 @@ export default function AdminPanel({ onBack }: Props) {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"code" | "link" | null>(null);
 
   const secure = isSecureMode();
+  const edits = secure ? 0 : editedQuestionCount(questions);
+
+  // A code dies 15 minutes after it is created, so the host needs to see the
+  // clock they are handing out, not just the code.
+  const [left, setLeft] = useState(0);
+  useEffect(() => {
+    if (!code) return;
+    const tick = () => {
+      const room = activeRoomLocal();
+      setLeft(room && room.code === code ? timeLeftOn(room) : 0);
+    };
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [code]);
 
   const unlock = async () => {
     setBusy(true);
@@ -57,14 +86,18 @@ export default function AdminPanel({ onBack }: Props) {
     }
   };
 
-  // The link carries the whole room, so a guest's device needs no server and no
-  // prior knowledge of this room — opening the link is the entire join flow.
+  // Both carry the whole room, so a guest's device needs no server and no prior
+  // knowledge of this room. The code is the one to read out; the link is for
+  // pasting, and for the case where edited questions make the code too long.
   const shareLink = code ? (inviteLinkLocal(window.location.origin, code) ?? "") : "";
-  const copy = async () => {
+  const shareCode = code ? (shareCodeLocal(code) ?? code) : "";
+  const typable = !!shareCode && isTypableCode(shareCode);
+
+  const copyText = async (text: string, what: "code" | "link") => {
     try {
-      await navigator.clipboard.writeText(shareLink);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(text);
+      setCopied(what);
+      setTimeout(() => setCopied(null), 1500);
     } catch {
       /* ignore */
     }
@@ -107,6 +140,23 @@ export default function AdminPanel({ onBack }: Props) {
           {busy ? "…" : "Create room & get code"}
         </button>
       </div>
+
+      {/* Every edited question has to travel inside the invite link, so tell the
+          host what their edits cost and give them one click back to short. */}
+      {edits > 0 && (
+        <div className="panel p-3 mb-3 flex items-center justify-between gap-3 border-amber/30">
+          <p className="text-xs text-white/60">
+            {edits} of {questions.length} questions differ from the built-in set, so the invite
+            link has to carry {edits === 1 ? "it" : "them"} and gets longer.
+          </p>
+          <button
+            className="text-xs text-teal hover:underline whitespace-nowrap"
+            onClick={() => setQuestions(defaultQuestions())}
+          >
+            Use built-in questions
+          </button>
+        </div>
+      )}
       <p className="text-xs text-white/40 mb-4">
         Edit the 10 questions, then create a room. Players retype each question before they answer
         it. A code covers one game and expires when that run ends, so create a new room for every
@@ -115,23 +165,52 @@ export default function AdminPanel({ onBack }: Props) {
 
       {code && (
         <div className="panel p-5 mb-4 text-center animate-pop border-teal/40">
-          <p className="text-white/60 text-sm">Room {code} is live. Share this link:</p>
-          <p className="mt-2 mx-auto max-w-full truncate rounded-xl bg-black/40 px-3 py-2 font-mono text-xs text-teal/80">
-            {shareLink}
-          </p>
+          {typable ? (
+            <>
+              <p className="text-white/60 text-sm">Room is live. Share this code:</p>
+              <p className="font-display font-bold text-4xl tracking-[0.25em] text-teal my-2 break-all">
+                {shareCode}
+              </p>
+              <button
+                className="text-sm text-teal hover:underline"
+                onClick={() => copyText(shareCode, "code")}
+              >
+                {copied === "code" ? "✓ Code copied" : "Copy code"}
+              </button>
+              <p className="mt-3 text-xs text-white/50">
+                Players open the site, type a username and this code, and race. It works on any
+                device — the code carries the quiz, so nothing has to be looked up.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-white/60 text-sm">
+                Room {code} is live. Your edits are too long for a typed code, so share this
+                link:
+              </p>
+              <p className="mt-2 mx-auto max-w-full truncate rounded-xl bg-black/40 px-3 py-2 font-mono text-xs text-teal/80">
+                {shareLink}
+              </p>
+              <p className="mt-3 text-xs text-white/50">
+                Want a code short enough to type? Use the built-in questions.
+              </p>
+            </>
+          )}
           <button
             className="btn-arcade mt-3 !py-2 !px-5 text-sm !bg-teal !text-void"
-            onClick={copy}
+            onClick={() => copyText(shareLink, "link")}
           >
-            {copied ? "✓ Copied" : "Copy invite link"}
+            {copied === "link" ? "✓ Copied" : "Copy invite link"}
           </button>
-          <p className="mt-3 text-xs text-white/50">
-            The link carries the questions, so anyone who opens it just types a username and
-            races. The 6-character code on its own only works on this device. Edit a question
-            and the link grows, because the change has to travel with it.
-          </p>
-          <p className="mt-2 text-xs text-amber">
-            Single use per player. Create a new room for the next round.
+          <p className="mt-3 text-xs text-amber">
+            {left > 0 ? (
+              <>
+                Expires in <span className="font-display font-bold">{fmtLeft(left)}</span> · single
+                use per player. Create a new room for the next round.
+              </>
+            ) : (
+              <>This code has expired. Create a new room to keep playing.</>
+            )}
           </p>
         </div>
       )}

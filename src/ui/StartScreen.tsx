@@ -2,7 +2,22 @@ import { useEffect, useState } from "react";
 import RaceCanvas from "../race/RaceCanvas";
 import { isValidUsername } from "../game/username";
 import { isSecureMode } from "../data/supabase";
-import { activeRoomLocal, adoptRoomFromUrl, isRoomOpen } from "../data/rooms";
+import {
+  activeRoomLocal,
+  adoptRoomFromUrl,
+  isRoomOpen,
+  isTypableCode,
+  shareCodeLocal,
+  timeLeftOn,
+} from "../data/rooms";
+
+/** The code for a room already open on this device, if it is short enough to show. */
+function hostCode(): string | null {
+  const room = activeRoomLocal();
+  if (!room || room.status !== "open" || timeLeftOn(room) <= 0) return null;
+  const share = shareCodeLocal(room.code);
+  return share && isTypableCode(share) ? share : room.code;
+}
 
 interface Props {
   onJoin: (username: string, code: string) => void;
@@ -20,15 +35,18 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
   // but showing it as an invitation would only hand the guest an error on submit.
   const [invited] = useState(() => {
     const room = adoptRoomFromUrl();
-    return room && room.status === "open" ? room : null;
+    // Spent or expired rooms still adopt — that is how both rules survive a
+    // reload — but neither is an invitation worth showing.
+    return room && room.status === "open" && timeLeftOn(room) > 0 ? room : null;
   });
   const [code, setCode] = useState(
     () =>
       invited?.code ??
       new URLSearchParams(window.location.search).get("room")?.toUpperCase() ??
       // On the host's own device the open room is right here, so don't make them
-      // retype a code they just created.
-      activeRoomLocal()?.code ??
+      // retype a code they just created. Prefer the share code, so what they see
+      // matches what they handed out.
+      hostCode() ??
       "",
   );
   const [roomOpen, setRoomOpen] = useState<boolean | null>(null);
@@ -101,16 +119,14 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
             Join race 🏁
           </button>
         </div>
-      ) : roomOpen === false ? (
-        <div className="mt-5 panel p-5 text-center">
-          <p className="font-display text-lg text-amber">No game running right now</p>
-          <p className="text-white/60 text-sm mt-1">
-            Either the last code has been played or the host hasn't opened a room yet. Ask the host
-            for the invite link: it carries the room with it, so opening it is all you need.
-          </p>
-        </div>
       ) : (
+        // Always here, on every device. Hiding the form when this browser had no
+        // room of its own was the whole reason a guest saw a dead end instead of
+        // somewhere to type the code they were given.
         <div className="mt-5 space-y-3">
+          <p className="font-display font-bold text-sm text-white/50 uppercase tracking-wide">
+            Join a game
+          </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               className="input-arcade sm:flex-1"
@@ -121,9 +137,11 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
               autoComplete="off"
             />
             <input
-              // Room keys are base64url and case-sensitive, so only style the short
-              // hand-typed codes as uppercase — never rewrite what was pasted.
-              className={`input-arcade sm:w-48 ${code.length > 10 ? "text-xs" : "uppercase tracking-widest"}`}
+              // Room codes are keys, and a long one is base64url and case-sensitive,
+              // so only style short codes as uppercase — never rewrite what was typed.
+              className={`input-arcade sm:w-56 ${
+                code.length > 12 ? "text-xs" : "uppercase tracking-widest"
+              }`}
               placeholder="ROOM CODE"
               value={code}
               onChange={(e) => setCode(e.target.value.trim())}
@@ -131,9 +149,6 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
               autoComplete="off"
             />
           </div>
-          <p className="text-xs text-white/30">
-            Joining from another device? Paste the host's invite link here instead of the code.
-          </p>
           <button
             className="btn-arcade w-full sm:w-auto"
             disabled={!valid}
@@ -141,6 +156,12 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
           >
             Join race 🏁
           </button>
+          {roomOpen === false && (
+            <p className="text-xs text-white/30">
+              Nothing open on this device — that's fine, the host's code brings its own. Codes
+              last 15 minutes from the moment the host creates them.
+            </p>
+          )}
         </div>
       )}
 

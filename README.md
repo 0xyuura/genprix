@@ -32,11 +32,14 @@ Built for the GenLayer community.
   can never out-rank a complete one.
 - **2 hints per session** — a hint reveals only the **first and last letter** of the
   answer (`o _ _ _ _ _ _ _ _ _   _ _ _ _ _ _ _ _ y`).
-- **Host a game with a short invite link** — the admin creates a room and gets a link
-  that **carries the room inside it**: `genprix.vercel.app/r/0AB4K7Q`, barely longer than
-  the code itself. Anyone who opens it lands on a single username box and races; no
-  server, no sign-up, and their device never needs to have heard of the host. No room =
-  no game, so the host still controls when play opens.
+- **Join from the home page with a username and a code** — the code *is* the room. With
+  the built-in questions it is ten characters (`0ANAN427H3`), and it carries the quiz and
+  its own creation time, so it works on any device with no server and no sign-up. There is
+  also an invite link (`genprix.vercel.app/r/0ANAN427H3`) that skips straight to the
+  username box.
+- **Codes expire after 15 minutes** — the creation minute is baked into the code itself,
+  so every device agrees on the deadline; a guest cannot refresh their way into more time.
+  Past that, the code is refused with an explanation.
 - **One code, one game** — a room is **single use**. It is burned the moment a run ends,
   and a name that already raced in it cannot rejoin, so the same room can never host a
   second round on that device. Hosts create a fresh room per round.
@@ -73,7 +76,7 @@ needs an active room, do this once to play locally:
    real passcode is never committed).
 2. Click the **🔒** button (bottom-right) → enter that passcode.
 3. Edit the 10 questions if you want, then **Create room & get code**.
-4. Go back, enter a username + the code, and race.
+4. Go back, enter a username + the code, and race. The code is good for 15 minutes.
 
 (In local/demo mode the room + scores live in this browser only. Cross-device rooms and the
 global board need Supabase — see below.)
@@ -92,21 +95,28 @@ A **"Global board"** badge on the start screen confirms secure mode is on.
 ### Hosting a game
 🔒 (bottom-right) → passcode → edit the 10 questions → **Create room & get code** → **Copy
 invite link**. Share that link. Players open it, type a username, and race those questions.
-The room covers one game only, so create a new one for the next round. The leaderboard
-resets at the top of every hour.
+The room covers one game only and the code dies 15 minutes after you create it, so make it
+when your players are ready, not before. The panel counts the time down for you. The
+leaderboard resets at the top of every hour.
 
-**Share the link, not the six-character code.** In local/demo mode the code is only a label
-for a room living in the host's own browser, so typing it on another device cannot work —
-that device has never seen the room. The link is what carries the questions. (The code box
-also accepts a pasted link or room key, for anyone who ends up there.)
+**The code carries the room.** In local/demo mode there is no server to look a room up in,
+so a plain label would mean nothing on a phone that has never seen it. The code itself is
+the room: `0` + five characters of creation minute + two random + two check characters.
+Players type it on the home page next to their username and race — any device, no link
+needed. (The code box also takes a pasted invite link or room key.)
 
-**How the link stays short.** An unedited quiz travels as one character — every device
-already ships those ten questions, so `/r/0AB4K7Q` is the whole room, 36 characters with the
-domain. Edit a question and only that question travels, indexed against the bundled set, so
-two edits cost two questions rather than ten. Records use ASCII separators instead of JSON,
-and a four-character checksum makes a link that a chat client clipped fail loudly instead of
-decoding into a quiz with truncated answers. Rewrite all ten questions and the link is
-genuinely long: there is nowhere else to put them without a backend.
+**Why the check characters.** Without them every string starting with `0` would open a game
+the host never ran. They also catch a mistyped character. It is obscurity, not security —
+the rule is in the bundle, like everything else in demo mode.
+
+**Editing the questions makes the code long.** An unedited quiz needs no payload at all,
+because every device already ships those ten questions. Edit one and only that one travels,
+indexed against the built-in set, so two edits cost two questions rather than ten; the admin
+panel tells you how many differ and offers one click back to the built-in set. Rewrite all
+ten and the code is too long to type — share the link instead. There is nowhere else to put
+them without a backend. Records use ASCII separators instead of JSON, and a four-character
+checksum makes a link a chat client clipped fail loudly rather than decode into a quiz with
+truncated answers.
 
 **What local/demo mode still cannot do:** scores stay on the device that made them, so
 players will not see each other on the leaderboard, and "one code, one game" is enforced per
