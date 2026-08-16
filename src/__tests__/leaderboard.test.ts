@@ -8,6 +8,7 @@ import {
   HOUR_MS,
   type Entry,
 } from "../data/leaderboard";
+import { runScore, SESSION_MS } from "../game/scoring";
 
 const e = (u: string, score: number, totalMs: number, bucket = currentHourBucket()): Entry => ({
   username: u,
@@ -40,6 +41,47 @@ describe("sortEntries", () => {
   it("orders by score desc then totalMs asc", () => {
     const out = sortEntries([e("a", 100, 5000), e("b", 200, 9000), e("c", 200, 4000)]);
     expect(out.map((x) => x.username)).toEqual(["c", "b", "a"]);
+  });
+  it("puts the more complete run first when scores tie", () => {
+    const partial = { ...e("partial", 200, 1000), correct: 6 };
+    const complete = { ...e("complete", 200, 9000), correct: 10 };
+    expect(sortEntries([partial, complete]).map((x) => x.username)).toEqual([
+      "complete",
+      "partial",
+    ]);
+  });
+});
+
+// The board the host described: finish the game fast, typed exactly, take #1.
+describe("board order for real runs", () => {
+  const run = (u: string, correct: number, msLeft: number, w: number, acc: number): Entry => ({
+    username: u,
+    avatarSeed: u,
+    score: runScore(correct, msLeft, w, acc),
+    correct,
+    totalMs: SESSION_MS - msLeft,
+    hourBucket: currentHourBucket(),
+    createdAt: 0,
+    wpm: w,
+    accuracy: acc,
+  });
+
+  it("ranks fast-and-exact first, then slower, then sloppier, then incomplete", () => {
+    const board = sortEntries([
+      run("sloppy", 10, SESSION_MS * 0.6, 80, 0.7), // full but typo-ridden
+      run("nearly", 9, SESSION_MS * 0.9, 120, 1), // faster, flawless, one short
+      run("ace", 10, SESSION_MS * 0.6, 80, 1), // full, fast, exact
+      run("plodder", 10, SESSION_MS * 0.1, 80, 1), // full and exact but slow
+    ]);
+    expect(board.map((x) => x.username)).toEqual(["ace", "sloppy", "plodder", "nearly"]);
+  });
+
+  it("never ranks an incomplete run above a complete one, however fast", () => {
+    const board = sortEntries([
+      run("speedrunner", 9, SESSION_MS, 200, 1),
+      run("finisher", 10, 0, 10, 0),
+    ]);
+    expect(board[0].username).toBe("finisher");
   });
 });
 

@@ -33,7 +33,7 @@ each attempt server-expensive. Not feasible via the API.
 | B3 | Scores written only by `finish_run` | ✅ 🔬 | `scores` has no anon INSERT policy. Verify: `insert into scores(...)` with anon key → denied. Rows appear only after `finish_run`. |
 | B4 | Score computed server-side from server state | ✅ | `answer_question` computes points in SQL from the run's stored streak + server-measured elapsed; the client cannot supply points. |
 | B5 | Timing can't be faked | ✅ | Speed bonus uses `now() - question_served_at` (server clock), not any client-reported time. |
-| B6 | Score clamped to the max possible | ✅ | `finish_run` clamps to `MAX_SCORE_PER_ROUND = 3375` (matches the unit-tested client constant). |
+| B6 | Score clamped to the max possible | ✅ | `finish_run` clamps to `MAX_SCORE = 10900` (matches the unit-tested client constant). |
 | B7 | No re-answering / skipping / replay | ✅ 🔬 | `answer_question` requires the current `order_idx` question id, advances `current_index`, and locks the row `FOR UPDATE`. Verify: replaying the same `question_id` or sending a later one → `question out of order`. |
 | B8 | Run requires a secret token | ✅ 🔬 | Every `answer_question`/`finish_run` needs the run `token` (uuid). `runs` has no anon read, so the token can't be discovered. Verify: wrong token → `invalid run or token`. |
 | B9 | Per-question server timeout | ✅ | Answers arriving >25s after `question_served_at` are scored wrong regardless of content. |
@@ -63,7 +63,7 @@ each attempt server-expensive. Not feasible via the API.
 
 `npm test` covers the logic these guarantees mirror:
 - `quiz.test.ts` — normalization + fuzzy matching (incl. short-answer guard).
-- `scoring.test.ts` — score math and `MAX_SCORE_PER_ROUND === 3375` (the server clamp).
+- `scoring.test.ts` — score math and `MAX_SCORE === 10900` (the server clamp).
 - `leaderboard.test.ts` — rank ordering (score desc, time asc) + adapter selection.
 - `username.test.ts` — sanitization (HTML/control stripping, length).
 

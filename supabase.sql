@@ -307,10 +307,12 @@ begin
     v_correct := answer_matches(p_answer, v_q.accepted);
   end if;
 
+  -- Ranking rule (mirrors src/game/scoring.ts): a correct answer is worth far
+  -- more than any bonus, so finishing more of the game always outranks being
+  -- quick at less of it. Speed is paid once at the end, out of the clock.
   if v_correct then
-    v_speed  := round(100 * (v_limit - least(v_elapsed, v_limit))::numeric / v_limit);
     v_streak := v_run.streak + 1;
-    v_pts    := 100 + v_speed + 25 * v_streak;
+    v_pts    := 1000;
   else
     v_streak := 0;
     v_pts    := 0;
@@ -350,18 +352,24 @@ declare
   v_total  int;
   v_rank   int;
   v_bucket bigint;
+  v_session int := 600000;  -- ms, mirrors SESSION_MS
   -- Anti-cheat clamp; must track MAX_SCORE in src/game/scoring.ts:
-  -- 10×100 base + 600s×5 time bonus + 200 WPM×2 typing bonus = 4400.
-  v_max    int := 4400;
+  -- 10×1000 per correct + 500 time + 300 accuracy + 100 speed = 10900.
+  v_max    int := 10900;
 begin
   select * into v_run from runs where id = p_run_id and token = p_token for update;
   if not found then raise exception 'invalid run or token'; end if;
 
-  v_score := least(v_run.score, v_max);
-
   if not v_run.finished then
     v_total  := floor(extract(epoch from (now() - v_run.server_started_at)) * 1000)::int;
     v_bucket := floor(extract(epoch from now()) / 3600)::bigint;
+    -- Time bonus is paid from the server's own clock, so a faked duration can
+    -- never buy places. The typing bonus is client-side only (the server does
+    -- not see keystrokes), which is why it is capped well under one answer.
+    v_score  := least(
+      v_run.score + round(500 * greatest(0, v_session - v_total)::numeric / v_session)::int,
+      v_max
+    );
     update runs set finished = true, finished_at = now() where id = v_run.id;
     insert into scores (round, username, avatar_seed, score, correct, total_ms, hour_bucket)
     values (v_run.round, v_run.username, v_run.avatar_seed, v_score, v_run.correct, v_total, v_bucket);
@@ -371,9 +379,15 @@ begin
   else
     v_total  := floor(extract(epoch from (v_run.finished_at - v_run.server_started_at)) * 1000)::int;
     v_bucket := floor(extract(epoch from v_run.finished_at) / 3600)::bigint;
+    -- Replaying finish_run returns the row that was already written, never a new one.
+    select score into v_score from scores
+    where hour_bucket = v_bucket and username = v_run.username and round = v_run.round
+    order by created_at desc limit 1;
+    v_score := coalesce(v_score, least(v_run.score, v_max));
   end if;
 
-  -- Rank within the current hour's global board.
+  -- Rank within the current hour's global board: highest score first, and the
+  -- faster run wins a tie. Score already puts completion above everything else.
   select count(*) + 1 into v_rank from scores
   where hour_bucket = v_bucket
     and (score > v_score or (score = v_score and total_ms < v_total));

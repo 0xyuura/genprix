@@ -39,16 +39,25 @@ export interface LeaderboardAdapter {
   rankFor(score: number, totalMs: number): Promise<number>;
 }
 
+// Ranking rule: whoever completed the most of the game, fastest, with the
+// cleanest typing sits on top. All three already live inside `score` — a correct
+// answer outweighs every bonus combined, so more solved always ranks higher, and
+// within the same solved count the score falls away with the clock and with
+// typos. Time is kept as the tiebreak for two identical scores.
+
 /** A run beats another if it scored higher, or matched the score and got there faster. */
 export function beats(score: number, totalMs: number, e: Entry): boolean {
   return e.score > score || (e.score === score && e.totalMs < totalMs);
 }
 
 export function sortEntries(entries: Entry[]): Entry[] {
-  return [...entries].sort((a, b) => b.score - a.score || a.totalMs - b.totalMs);
+  return [...entries].sort(
+    (a, b) => b.score - a.score || b.correct - a.correct || a.totalMs - b.totalMs,
+  );
 }
 
-const LS_KEY = "ggp_scores_v2";
+// Bumped with the v5 scoring scale so an hour's board never mixes point scales.
+const LS_KEY = "ggp_scores_v3";
 
 export class LocalAdapter implements LeaderboardAdapter {
   private read(): Entry[] {

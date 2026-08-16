@@ -66,5 +66,5 @@ VITE_SUPABASE_ANON_KEY=YOUR-ANON-PUBLIC-KEY
   `questions` table (no anon read) and are checked inside the `answer_question` RPC.
 - Scores are computed and written **only** server-side by `finish_run`; the client
   cannot submit a score. Answer timing is measured by the server, so speed bonuses
-  can't be faked. Scores are clamped to the maximum possible (3375).
+  can't be faked. Scores are clamped to the maximum possible (10900).
 - See `SECURITY-AUDIT.md` (generated after the audit) for the verification checklist.

@@ -147,7 +147,7 @@ function QuestionPanel({
 
         {solved ? (
           <div className="rounded-2xl p-4 bg-good/15 border border-good/40 animate-pop">
-            <p className="font-display font-bold text-lg text-good">✅ Correct! +100 pts</p>
+            <p className="font-display font-bold text-lg text-good">✅ Correct! +1,000 pts</p>
           </div>
         ) : (
           <>

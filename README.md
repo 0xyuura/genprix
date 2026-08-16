@@ -26,10 +26,10 @@ Built for the GenLayer community.
   GenLayer scenery, boost on correct, skid on wrong, checkpoints + finish flag.
 - **Mochi reacts** — the mascot's face turns **happy** 😄 on a correct answer and
   **angry** 😡 on a wrong one (aura, hop, and expression drawn on the canvas).
-- **10-minute session timer** for the whole quiz · score = 100 per correct answer + a
-  remaining-time bonus (5/sec) + a typing bonus (2 per WPM × accuracy, WPM capped at 200).
-  Both bonuses are scaled by the fraction solved, so an early quit can't out-score a
-  complete run.
+- **10-minute session timer** for the whole quiz · score = **1,000 per correct answer**
+  + up to 500 for the time still on the clock + up to 300 for typing accuracy + up to 100
+  for raw speed. The bonuses total 900, less than a single answer, so a fast partial run
+  can never out-rank a complete one.
 - **2 hints per session** — a hint reveals only the **first and last letter** of the
   answer (`o _ _ _ _ _ _ _ _ _   _ _ _ _ _ _ _ _ y`).
 - **Host a game with a room code** — the admin creates a room, gets a **share code**
@@ -39,9 +39,11 @@ Built for the GenLayer community.
   never host a second round. Hosts create a fresh room per round; that is what stops
   anyone replaying the same questions to farm the leaderboard.
 - **Username only** — no wallet, no sign-up. Just a name + the room code (auto mochi avatar).
-- **Speed leaderboard** — ranks whoever finishes the quiz fastest with the most correct
-  (score already folds in the time bonus); **auto-resets every clock hour** with a live
-  "resets in mm:ss" countdown.
+- **Speed leaderboard** — first place goes to whoever completes the game fastest with
+  the most exact typing, and the board reads down from there until the clock runs out.
+  Questions solved is the first key (a correct answer outweighs every bonus combined),
+  then the time left, then typing accuracy — all folded into the score, with time as the
+  tiebreak. **Auto-resets every clock hour** with a live "resets in mm:ss" countdown.
 - **Admin panel** — a discreet 🔒 button in the bottom-right corner opens the passcode-gated
   admin, where you input the questions/answers and create the room.
 - **Capture guard during a live round** — question text can't be selected, copied,
@@ -102,7 +104,7 @@ Local/demo mode is not secured (there's no shared board to cheat). **Secure mode
 - **Server-authoritative scoring** — there is no client "submit score" path. A run is a
   server-side session (`start_run` → `answer_question` × N → `finish_run`); the DB checks
   each answer, measures timing on its own clock (so speed can't be faked), computes the
-  score, clamps it to the maximum possible (4400), and writes the only leaderboard row.
+  score, clamps it to the maximum possible (10900), and writes the only leaderboard row.
 - **Single-use room codes are enforced in Postgres too** — `finish_run` flips the room to
   `done`, and `join_room` refuses both a closed code and a name that already has a run in
   that room.

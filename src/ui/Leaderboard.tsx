@@ -45,12 +45,16 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
         </button>
       </div>
 
-      <div className="flex items-center justify-between mb-4 text-xs">
+      <div className="flex items-center justify-between mb-2 text-xs">
         <span className="text-white/40">
           {isSecureMode() ? "Global · server-verified" : "Local demo · this device only"}
         </span>
         <span className="font-display text-amber">♻ resets in {fmt(resetIn)}</span>
       </div>
+      <p className="text-xs text-white/40 mb-4">
+        Ranked by questions solved first, then by how much of the 10 minutes you had left, then by
+        how exactly you typed. Finish the whole game fast with no typos and you take first.
+      </p>
 
       {error && <p className="text-bad">{error}</p>}
       {!entries && !error && <p className="text-white/50">Loading…</p>}
@@ -75,12 +79,23 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
               </span>
               <Avatar seed={e.avatarSeed} name={e.username} size={36} />
               <span className="font-semibold text-ceramic truncate flex-1">{e.username}</span>
-              <span className="text-white/50 text-sm hidden sm:inline">{e.correct}/10</span>
-              <span className="text-white/50 text-sm hidden sm:inline">
+              <span
+                className={`text-sm hidden sm:inline ${
+                  e.correct === 10 ? "text-good" : "text-white/50"
+                }`}
+              >
+                {e.correct}/10
+              </span>
+              <span className="text-white/50 text-sm hidden sm:inline tabular-nums">
                 {(e.totalMs / 1000).toFixed(1)}s
               </span>
-              {e.wpm != null && (
+              {e.accuracy != null && (
                 <span className="text-white/50 text-sm hidden md:inline font-mono tabular-nums">
+                  {Math.round(e.accuracy * 100)}%
+                </span>
+              )}
+              {e.wpm != null && (
+                <span className="text-white/50 text-sm hidden lg:inline font-mono tabular-nums">
                   {e.wpm} wpm
                 </span>
               )}
