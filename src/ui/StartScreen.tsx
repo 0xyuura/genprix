@@ -9,7 +9,6 @@ import {
   isRoomLive,
   isRoomOpen,
   isTypableCode,
-  ROOM_CAPACITY,
   shareCodeLocal,
 } from "../data/rooms";
 
@@ -84,13 +83,15 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
     <div className="mx-auto max-w-3xl px-4 py-6">
       <header className="flex items-center justify-between mb-5">
         <img src="/brand/wordmark-white.png" alt="GenLayer" className="h-6 opacity-90" />
-        <span className="flex items-center gap-2 stencil">
-          <span
-            className={`w-2 h-2 rounded-full ${secure ? "bg-good" : "bg-amber"}`}
-            aria-hidden
-          />
-          {secure ? "Timing online" : "Local timing"}
-        </span>
+        {/* Only shown when a real server is keeping time. There is nothing worth
+            telling a player about the local case: "local timing" only announced
+            that the board is not global, which is not news they can use. */}
+        {secure && (
+          <span className="flex items-center gap-2 stencil">
+            <span className="w-2 h-2 rounded-full bg-good" aria-hidden />
+            Timing online
+          </span>
+        )}
       </header>
 
       {/* Title as trackside signage: heavy caps sitting on the kerb. */}
@@ -108,15 +109,15 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
       </p>
 
       {/* The numbers as a spec sheet. A sentence claiming that speed and accuracy
-          "count toward your score" says nothing; these are the actual figures. */}
-      {/* divide-y only matters on the two-column phone layout, where the grid
-          wraps and the second row would otherwise butt straight against the first. */}
-      <dl className="mt-5 grid grid-cols-2 sm:grid-cols-4 border border-line divide-x divide-y sm:divide-y-0 divide-line bg-pit">
+          "count toward your score" says nothing; these are the actual figures.
+          Seats per code is deliberately not one of them: without a shared backend
+          the count is per device, so promising it on the front page would be
+          advertising a limit this build cannot actually hold anyone to. */}
+      <dl className="mt-5 grid grid-cols-3 border border-line divide-x divide-line bg-pit">
         {[
           ["Questions", "10"],
           ["Minutes", "10"],
           ["Hints", "2"],
-          ["Seats per code", String(ROOM_CAPACITY)],
         ].map(([label, value]) => (
           <div key={label} className="px-3 py-2.5">
             <dd className="num text-xl text-teal">{value}</dd>
