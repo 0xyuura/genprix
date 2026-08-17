@@ -7,18 +7,18 @@ import type { PublicQuestion } from "../game/quiz";
 export interface StartRunResult {
   run_id: string;
   token: string;
-  index: number;
-  question: PublicQuestion;
+  // The whole board. The client shows all ten and lets the player take them in
+  // any order, so the server hands over the set rather than a cursor.
+  questions: PublicQuestion[];
 }
 
 export interface AnswerResult {
   correct: boolean;
   points_awarded: number;
-  correct_answer: string;
+  correct_answer: string | null;
   new_score: number;
   correct_count: number;
-  index: number;
-  next_question: PublicQuestion | null;
+  answered: string[];
 }
 
 export interface FinishResult {

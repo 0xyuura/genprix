@@ -22,6 +22,7 @@ import {
 import { sanitizeUsername, avatarSeed } from "./username";
 import { isSecureMode } from "../data/supabase";
 import { joinRoomLocal } from "../data/rooms";
+import { joinRoom, answerQuestion, finishRun } from "../data/backend";
 import { selectAdapter, currentHourBucket, type Entry } from "../data/leaderboard";
 import type { FxEvent } from "../race/RaceCanvas";
 import type { Mood } from "../race/race";
@@ -117,6 +118,10 @@ export function useGame() {
 
   const localQs = useRef<Question[]>([]);
   const roomCode = useRef<string>("");
+  // Secure mode only: the server's handle on this run. Every answer and the
+  // finish are graded there, so these two are what make the score real.
+  const runId = useRef<string | null>(null);
+  const runToken = useRef<string | null>(null);
   const endsAt = useRef(0);
   const fxId = useRef(0);
   const moodTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -154,6 +159,42 @@ export function useGame() {
     const acc = totalsAccuracy(s.typeTotals);
     const score = runScore(s.solvedCount, remMs, avgWpm, acc);
     const totalMs = SESSION_MS - remMs;
+
+    // Secure mode: the server closes the run, writes the score from its own
+    // tally and its own clock, and answers with the placing. Nothing the client
+    // computed above is trusted, which is the entire point of a shared board.
+    if (runId.current && runToken.current) {
+      const id = runId.current;
+      const tok = runToken.current;
+      runId.current = null;
+      runToken.current = null;
+      void finishRun(id, tok)
+        .then((r) =>
+          setState((st) => ({
+            ...st,
+            phase: "results",
+            mood: "idle",
+            score: r.score,
+            totalMs: r.total_ms,
+            rank: r.rank,
+            wpm: avgWpm,
+            accuracy: acc,
+          })),
+        )
+        .catch((e) =>
+          setState((st) => ({
+            ...st,
+            phase: "results",
+            mood: "idle",
+            score,
+            totalMs,
+            wpm: avgWpm,
+            accuracy: acc,
+            notice: (e as Error).message || "Could not save the score.",
+          })),
+        );
+      return;
+    }
 
     let rank: number | null = null;
     try {
@@ -196,16 +237,36 @@ export function useGame() {
 
   // Join the room by code and open a fresh 10-minute session. The code is burned on
   // finish, and a name that already raced here is refused.
-  const join = useCallback((rawName: string, code: string) => {
+  const join = useCallback(async (rawName: string, code: string) => {
     const username = sanitizeUsername(rawName);
     const seed = avatarSeed(username);
     clearTimers();
     finished.current = false;
     const secure = isSecureMode();
 
+    // Secure mode opens the run on the server and takes the board back from it,
+    // so a player on a device that has never seen this room can still join by
+    // code. Local mode keeps the self-contained code, where the room travels
+    // inside the code itself.
     let qs: Question[];
     try {
-      qs = joinRoomLocal(code, username); // throws if no room / wrong code / already used
+      if (secure) {
+        const started = await joinRoom(code, username, seed);
+        runId.current = started.run_id;
+        runToken.current = started.token;
+        // The server never sends accepted answers. Grading happens there too, so
+        // the client has nothing to check against and does not need them.
+        qs = started.questions.map((q) => ({
+          id: q.id,
+          prompt: q.prompt,
+          accepted: [],
+          hint: q.hint ?? undefined,
+        }));
+      } else {
+        runId.current = null;
+        runToken.current = null;
+        qs = joinRoomLocal(code, username); // throws if no room / wrong code / already used
+      }
     } catch (e) {
       setState((st) => ({
         ...st,
@@ -288,7 +349,7 @@ export function useGame() {
   }, []);
 
   const submit = useCallback(
-    (answer: string) => {
+    async (answer: string) => {
       const s = stateRef.current;
       if (s.phase !== "playing" || s.selected == null) return;
       const idx = s.selected;
@@ -298,7 +359,23 @@ export function useGame() {
       if (!answer.trim()) return;
 
       const q = localQs.current[idx];
-      const correct = checkAnswer(answer, q.accepted);
+      // The server grades in secure mode and is the only thing that can award
+      // points there, so ask it and use its verdict. Locally the answers are in
+      // the bundle, so checkAnswer stands in for it.
+      let correct: boolean;
+      let revealed = q.accepted[0] ?? "";
+      if (runId.current && runToken.current) {
+        try {
+          const res = await answerQuestion(runId.current, runToken.current, q.id, answer);
+          correct = res.correct;
+          revealed = res.correct_answer ?? revealed;
+        } catch (e) {
+          setState((st) => ({ ...st, notice: (e as Error).message || "Answer rejected." }));
+          return;
+        }
+      } else {
+        correct = checkAnswer(answer, q.accepted);
+      }
 
       fxId.current += 1;
       const fxEvent: FxEvent = { id: fxId.current, type: correct ? "boost" : "skid" };
@@ -312,7 +389,7 @@ export function useGame() {
           solvedCount: newSolved,
           score: newSolved * POINTS_PER_CORRECT,
           fxEvent,
-          lastResult: { correct: true, correctAnswer: q.accepted[0] },
+          lastResult: { correct: true, correctAnswer: revealed },
         }));
         setMood("happy");
 
