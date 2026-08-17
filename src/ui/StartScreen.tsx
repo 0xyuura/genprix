@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import RaceCanvas from "../race/RaceCanvas";
 import { isValidUsername } from "../game/username";
-import { isSecureMode } from "../data/supabase";
 import { Chequer, StartLights } from "./Glyph";
 import {
   activeRoomLocal,
@@ -61,7 +60,6 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
   // decision instead of two empty fields. It opens itself whenever there is
   // already something to act on: a code we filled in, or an error to explain.
   const [joining, setJoining] = useState(() => code !== "" || !!error);
-  const secure = isSecureMode();
 
   useEffect(() => {
     let alive = true;
@@ -81,17 +79,10 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      <header className="flex items-center justify-between mb-5">
+      {/* No status badge. Whether a server is keeping score is not a player's
+          problem, and the leaderboard already says which kind of board it is. */}
+      <header className="mb-5">
         <img src="/brand/wordmark-white.png" alt="GenLayer" className="h-6 opacity-90" />
-        {/* Only shown when a real server is keeping time. There is nothing worth
-            telling a player about the local case: "local timing" only announced
-            that the board is not global, which is not news they can use. */}
-        {secure && (
-          <span className="flex items-center gap-2 stencil">
-            <span className="w-2 h-2 rounded-full bg-good" aria-hidden />
-            Timing online
-          </span>
-        )}
       </header>
 
       {/* Title as trackside signage: heavy caps sitting on the kerb. */}
