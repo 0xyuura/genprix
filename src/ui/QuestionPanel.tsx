@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type { BoardQuestion, LastResult } from "../game/useGame";
 import TypingPassage from "./TypingPassage";
+import { Backspace, Board, Check } from "./Glyph";
 import { accuracy, elapsedOf, hasError, progressOf, wpm, correctPrefixLen } from "../game/typing";
 
 interface Props {
@@ -64,30 +65,39 @@ function QuestionPanel({
   const erroring = hasError(typing);
 
   return (
-    <div className="panel p-5 sm:p-6">
-      <div className="flex items-center justify-between mb-3">
-        <span className="font-display font-bold text-sm text-white/50">Question {index + 1}</span>
-        <button className="text-sm text-teal hover:underline" onClick={onBack}>
-          ← All questions
+    <section className="panel-kerb">
+      <div className="flex items-center justify-between border-b border-line px-4 pt-4 pb-3">
+        <h2 className="font-display font-bold uppercase tracking-[0.12em] text-ceramic">
+          <span className="num text-white/35 mr-2">{String(index + 1).padStart(2, "0")}</span>
+          Checkpoint
+        </h2>
+        <button className="stencil hover:text-teal transition-colors" onClick={onBack}>
+          ← The grid
         </button>
       </div>
 
       {/* Stage 1 — retype the question, typeracer style. */}
-      <div className="rounded-2xl bg-black/30 p-4">
-        <div className="flex items-center justify-between mb-2 text-xs">
-          <span className="font-display font-bold text-white/50 uppercase tracking-wide">
-            {stage === "prompt" ? "① Retype the question" : "① Question typed ✓"}
+      <div className="px-4 pt-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className={`stencil ${stage === "prompt" ? "!text-teal" : "!text-good"}`}>
+            {stage === "prompt" ? "Stage 1 · retype the question" : "Stage 1 · cleared"}
           </span>
-          <span className="font-mono text-white/50 tabular-nums">
+          <span className="num text-[11px] text-white/45">
             {liveWpm} wpm · {liveAcc}%
           </span>
         </div>
 
-        <TypingPassage target={typing.target} typed={typing.typed} />
+        <div
+          className={`border p-3 bg-black/40 ${
+            erroring ? "border-bad/60" : stage === "answer" ? "border-good/30" : "border-line"
+          }`}
+        >
+          <TypingPassage target={typing.target} typed={typing.typed} />
+        </div>
 
-        <div className="mt-3 h-1.5 rounded-full bg-white/10 overflow-hidden">
+        <div className="mt-2 h-[3px] bg-white/10" aria-hidden>
           <div
-            className="h-full bg-gradient-to-r from-teal to-good transition-all duration-150"
+            className="h-full bg-teal transition-[width] duration-100"
             style={{ width: `${typedPct}%` }}
           />
         </div>
@@ -96,10 +106,10 @@ function QuestionPanel({
           <>
             <input
               ref={typeRef}
-              className={`input-arcade mt-3 font-mono !text-base ${
+              className={`input-arcade mt-3 !font-num !text-base ${
                 erroring ? "!border-bad !text-bad" : ""
               }`}
-              placeholder="Type the question above…"
+              placeholder="Retype the line above"
               value={typing.typed}
               onChange={(e) => onType(e.target.value)}
               onPaste={(e) => e.preventDefault()}
@@ -110,8 +120,9 @@ function QuestionPanel({
               spellCheck={false}
             />
             {erroring && (
-              <p className="mt-2 text-xs text-bad font-display">
-                ⌫ Wrong character. Backspace to fix it; the kart won't move past a typo.
+              <p className="mt-2 flex items-center gap-2 text-xs text-bad">
+                <Backspace size={13} />
+                Wrong character. Backspace it out; the kart won't pass a typo.
               </p>
             )}
           </>
@@ -119,35 +130,39 @@ function QuestionPanel({
       </div>
 
       {/* Stage 2 — answer it. Locked until the passage is typed out in full. */}
-      <div className={`mt-4 ${stage === "prompt" ? "opacity-40 pointer-events-none" : ""}`}>
-        <div className="font-display font-bold text-xs text-white/50 uppercase tracking-wide mb-2">
-          {stage === "prompt"
-            ? "② Answer (locked until the question is typed)"
-            : "② Type the answer"}
+      <div className={`px-4 pt-4 pb-4 ${stage === "prompt" ? "opacity-35 pointer-events-none" : ""}`}>
+        <div className="stencil mb-2">
+          {stage === "prompt" ? "Stage 2 · locked" : "Stage 2 · answer it"}
         </div>
 
         {!solved && stage === "answer" && (
           <div className="mb-2">
             {bq.hintMask ? (
-              <p className="text-sm text-teal/90 font-mono tracking-wider">
-                💡 <span className="text-white/50">answer:</span> {bq.hintMask}
+              <p className="num text-sm text-teal/90 tracking-[0.2em] flex items-center gap-2">
+                <Board size={13} />
+                {bq.hintMask}
               </p>
             ) : hintsLeft > 0 ? (
               <button
-                className="text-sm text-teal/80 hover:text-teal underline underline-offset-2"
+                className="text-sm text-teal/80 hover:text-teal flex items-center gap-2"
                 onClick={() => onUseHint(index)}
               >
-                Show hint: first and last letter ({hintsLeft} left)
+                <Board size={13} />
+                Show the first and last letter ({hintsLeft} left)
               </button>
             ) : (
-              <span className="text-sm text-white/30">No hints left this session</span>
+              <span className="text-sm text-white/30">Both hints spent</span>
             )}
           </div>
         )}
 
         {solved ? (
-          <div className="rounded-2xl p-4 bg-good/15 border border-good/40 animate-pop">
-            <p className="font-display font-bold text-lg text-good">✅ Correct! +1,000 pts</p>
+          <div className="border border-good/40 bg-good/10 px-4 py-3 animate-sweep">
+            <p className="font-display font-bold uppercase tracking-[0.1em] text-good flex items-center gap-2">
+              <Check size={15} />
+              Checkpoint claimed
+              <span className="num ml-auto">+1,000</span>
+            </p>
           </div>
         ) : (
           <>
@@ -155,7 +170,7 @@ function QuestionPanel({
               <input
                 ref={answerRef}
                 className="input-arcade"
-                placeholder="Type your answer…"
+                placeholder="Your answer"
                 value={value}
                 maxLength={100}
                 disabled={stage === "prompt"}
@@ -170,18 +185,18 @@ function QuestionPanel({
                 onClick={submit}
                 disabled={stage === "prompt" || !value.trim()}
               >
-                Go
+                Send
               </button>
             </div>
             {lastResult && !lastResult.correct && (
-              <p className="mt-3 text-bad font-display font-bold animate-pop">
-                😡 Wrong answer. Mochi's mad. Try again!
+              <p className="mt-3 font-display font-bold text-bad animate-shake">
+                Not it. Mochi's furious. Go again.
               </p>
             )}
           </>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 

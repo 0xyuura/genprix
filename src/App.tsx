@@ -10,6 +10,7 @@ import QuestionPanel from "./ui/QuestionPanel";
 import ResultsScreen from "./ui/ResultsScreen";
 import Leaderboard from "./ui/Leaderboard";
 import AdminPanel from "./ui/AdminPanel";
+import { Lock } from "./ui/Glyph";
 
 type View = "game" | "leaderboard" | "admin";
 
@@ -48,11 +49,11 @@ export default function App() {
         onClick={() => setView("admin")}
         title="Admin access"
         aria-label="Admin access"
-        className="fixed bottom-4 right-4 z-50 grid place-items-center w-12 h-12 rounded-full
-          bg-white/10 hover:bg-white/20 border border-white/15 backdrop-blur text-lg
-          transition-transform active:scale-95"
+        className="fixed bottom-4 right-4 z-50 grid place-items-center w-11 h-11 rounded
+          bg-pit hover:bg-pitlight border border-line text-white/50 hover:text-teal
+          shadow-hardsm transition-colors"
       >
-        🔒
+        <Lock size={16} />
       </button>
     );
 
@@ -84,7 +85,7 @@ export default function App() {
     const openBq = state.selected != null ? state.board[state.selected] : null;
     screen = (
       <div className="mx-auto max-w-3xl px-4 py-5">
-        <div className="rounded-3xl overflow-hidden border border-white/10 aspect-[16/7] mb-4">
+        <div className="rounded-md overflow-hidden border border-line aspect-[16/7] mb-3">
           <RaceCanvas
             progress={kartProgress(state)}
             fxEvent={state.fxEvent}
@@ -124,8 +125,8 @@ export default function App() {
         </div>
 
         {masked && (
-          <p className="mt-3 text-center text-sm text-amber font-display">
-            🙈 Questions hidden while the page is out of focus
+          <p className="mt-3 text-center stencil !text-amber">
+            Questions covered while this page is out of focus
           </p>
         )}
         {warning && (

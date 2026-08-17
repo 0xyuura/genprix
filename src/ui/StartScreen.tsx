@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import RaceCanvas from "../race/RaceCanvas";
 import { isValidUsername } from "../game/username";
 import { isSecureMode } from "../data/supabase";
+import { Chequer, StartLights } from "./Glyph";
 import {
   activeRoomLocal,
   adoptRoomFromUrl,
@@ -20,6 +21,14 @@ function hostCode(): string | null {
   return share && isTypableCode(share) ? share : room.code;
 }
 
+/** Race-control notes. Each one is a rule a player can act on, not decoration. */
+const NOTES = [
+  "Track limits: a wrong character parks the kart until you backspace it",
+  "Pit note: a hint shows the first and last letter of the answer",
+  "Classification: checkpoints first, then the clock, then how cleanly you typed",
+  "Session: the board wipes at the top of every hour",
+];
+
 interface Props {
   onJoin: (username: string, code: string) => void;
   onShowLeaderboard: () => void;
@@ -32,8 +41,6 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
   // A room can arrive three ways: inside an invite link (?r=…), as a bare code in
   // the old ?room= link, or typed in by hand. The first is the one that works on a
   // device that has never met the host.
-  // A spent room still adopts (that is how the single-use rule survives a reload),
-  // but showing it as an invitation would only hand the guest an error on submit.
   const [invited] = useState(() => {
     const room = adoptRoomFromUrl();
     // An ended room still adopts — that is how the one-run-per-player rule
@@ -75,47 +82,72 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      <div className="flex items-center justify-between mb-4">
+      <header className="flex items-center justify-between mb-5">
         <img src="/brand/wordmark-white.png" alt="GenLayer" className="h-6 opacity-90" />
-        {/* Only the secure-mode badge is worth showing players; the old "Local demo"
-            pill just advertised that the board wasn't real. */}
-        {secure && (
-          <span className="text-xs font-display font-bold px-3 py-1 rounded-full bg-good/20 text-good">
-            ● Global board
-          </span>
-        )}
-      </div>
+        <span className="flex items-center gap-2 stencil">
+          <span
+            className={`w-2 h-2 rounded-full ${secure ? "bg-good" : "bg-amber"}`}
+            aria-hidden
+          />
+          {secure ? "Timing online" : "Local timing"}
+        </span>
+      </header>
 
-      <h1 className="font-display font-bold text-4xl sm:text-5xl text-ceramic leading-none">
-        GenLayer <span className="text-magenta">Grand Prix</span>
+      {/* Title as trackside signage: heavy caps sitting on the kerb. */}
+      <h1 className="font-display font-bold uppercase leading-[0.9] text-ceramic text-[13vw] sm:text-6xl tracking-tight">
+        GenLayer
+        <br />
+        <span className="text-magenta">Grand Prix</span>
       </h1>
-      <p className="mt-2 text-white/70">
-        A typing race on GenLayer trivia. Enter a username and the host's room code, then take
-        the 10 questions in any order. Retype each question exactly to drive your mochi kart
-        forward, then type the answer to claim the checkpoint.
-      </p>
-      <p className="mt-2 text-white/40 text-sm">
-        You get 10 minutes and 2 hints. Speed, accuracy and correct answers all count toward your
-        score. A room code stays open 15 minutes and seats up to {ROOM_CAPACITY} racers, one run
-        each.
+      <div className="mt-3 h-[5px] w-40 bg-kerb" style={{ backgroundSize: "28px 5px" }} />
+
+      <p className="mt-4 text-white/70 max-w-xl">
+        Ten questions on GenLayer. Retype each one character for character to move your kart, then
+        type the answer to take the checkpoint. Miss a character and the kart stops until you
+        backspace it.
       </p>
 
-      <div className="mt-5 rounded-3xl overflow-hidden border border-white/10 aspect-[16/7]">
-        <RaceCanvas progress={0} className="w-full h-full block" />
+      {/* The numbers as a spec sheet. A sentence claiming that speed and accuracy
+          "count toward your score" says nothing; these are the actual figures. */}
+      {/* divide-y only matters on the two-column phone layout, where the grid
+          wraps and the second row would otherwise butt straight against the first. */}
+      <dl className="mt-5 grid grid-cols-2 sm:grid-cols-4 border border-line divide-x divide-y sm:divide-y-0 divide-line bg-pit">
+        {[
+          ["Questions", "10"],
+          ["Minutes", "10"],
+          ["Hints", "2"],
+          ["Seats per code", String(ROOM_CAPACITY)],
+        ].map(([label, value]) => (
+          <div key={label} className="px-3 py-2.5">
+            <dd className="num text-xl text-teal">{value}</dd>
+            <dt className="stencil !text-[10px] mt-0.5">{label}</dt>
+          </div>
+        ))}
+      </dl>
+
+      {/* Hero screen: the canvas behind a bezel, with the gantry lit above it. */}
+      <div className="mt-5 panel-kerb">
+        <div className="flex items-center justify-between px-3 pt-3 pb-2">
+          <StartLights />
+          <span className="stencil">Circuit preview</span>
+        </div>
+        <div className="aspect-[16/7] border-t border-line">
+          <RaceCanvas progress={0} className="w-full h-full block" />
+        </div>
       </div>
 
       {invited ? (
         // Invited by link: the room came with it, so all that is left is a name.
         <div className="mt-5 space-y-3">
-          <div className="panel p-4 border-teal/40 flex items-center justify-between gap-3">
-            <span className="text-white/60 text-sm">You're invited to room</span>
-            <span className="font-display font-bold text-2xl tracking-[0.2em] text-teal">
+          <div className="panel p-3 flex items-center justify-between gap-3 border-teal/40">
+            <span className="stencil">Room held for you</span>
+            <span className="num font-bold text-xl tracking-[0.2em] text-teal">
               {invited.code}
             </span>
           </div>
           <input
-            className="input-arcade w-full"
-            placeholder="Your username (2–20 chars)"
+            className="input-arcade"
+            placeholder="Your name on the timing screen"
             value={name}
             maxLength={24}
             onChange={(e) => setName(e.target.value)}
@@ -123,12 +155,8 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
             autoComplete="off"
             autoFocus
           />
-          <button
-            className="btn-arcade w-full sm:w-auto"
-            disabled={!valid}
-            onClick={() => onJoin(name, code)}
-          >
-            Join race 🏁
+          <button className="btn-arcade w-full sm:w-auto" disabled={!valid} onClick={() => onJoin(name, code)}>
+            Go to the grid
           </button>
         </div>
       ) : !joining ? (
@@ -137,31 +165,30 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
         // somewhere to type the code they were given.
         <div className="mt-5">
           <button className="btn-arcade w-full sm:w-auto" onClick={() => setJoining(true)}>
-            Join quiz 🏁
+            Join quiz
           </button>
-          <p className="mt-3 text-xs text-white/30">
-            You'll need a username and the room code from your host.
+          <p className="mt-3 text-xs text-white/35">
+            Bring a name and the room code your host read out.
           </p>
         </div>
       ) : (
         <div className="mt-5 space-y-3">
-          <p className="font-display font-bold text-sm text-white/50 uppercase tracking-wide">
-            Join a game
-          </p>
+          <p className="stencil">Sign on</p>
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               className="input-arcade sm:flex-1"
-              placeholder="Username (2–20 chars)"
+              placeholder="Name (2–20 characters)"
               value={name}
               maxLength={24}
               onChange={(e) => setName(e.target.value)}
               autoComplete="off"
+              autoFocus
             />
             <input
               // Room codes are keys, and a long one is base64url and case-sensitive,
               // so only style short codes as uppercase — never rewrite what was typed.
-              className={`input-arcade sm:w-56 ${
-                code.length > 12 ? "text-xs" : "uppercase tracking-widest"
+              className={`input-arcade sm:w-56 !font-num ${
+                code.length > 12 ? "!text-xs" : "uppercase tracking-[0.2em]"
               }`}
               placeholder="ROOM CODE"
               value={code}
@@ -170,50 +197,73 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
               autoComplete="off"
             />
           </div>
-          <button
-            className="btn-arcade w-full sm:w-auto"
-            disabled={!valid}
-            onClick={() => onJoin(name, code)}
-          >
-            Join race 🏁
+          <button className="btn-arcade w-full sm:w-auto" disabled={!valid} onClick={() => onJoin(name, code)}>
+            Go to the grid
           </button>
           {roomOpen === false && (
-            <p className="text-xs text-white/30">
-              Nothing open on this device — that's fine, the host's code brings its own. Codes
-              last 15 minutes from the moment the host creates them.
+            <p className="text-xs text-white/35">
+              Nothing open on this device, which is normal for a guest. The host's code carries the
+              questions with it and runs for 15 minutes from the moment they made it.
             </p>
           )}
         </div>
       )}
 
-      {error && <p className="mt-3 text-bad text-sm">{error}</p>}
+      {error && (
+        <p className="mt-3 panel caution-stripe border-flag/40 px-3 py-2 text-sm text-flag">
+          {error}
+        </p>
+      )}
 
-      <div className="mt-4 flex items-center text-sm">
-        <button className="text-teal hover:underline" onClick={onShowLeaderboard}>
-          🏆 View leaderboard
-        </button>
+      <button
+        className="mt-5 flex items-center gap-2 stencil hover:text-teal transition-colors"
+        onClick={onShowLeaderboard}
+      >
+        <Chequer size={13} />
+        Timing tower
+      </button>
+
+      {/* Pit-wall ticker: the rules, moving, where a marketing strapline would
+          otherwise sit. Duplicated once so the loop has no visible seam, and
+          masked at both ends so notes fade out instead of being sliced off. */}
+      <div
+        className="mt-6 border-y border-line overflow-hidden py-2"
+        style={{
+          maskImage: "linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)",
+          WebkitMaskImage: "linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)",
+        }}
+      >
+        <div className="ticker-track flex w-max gap-8 whitespace-nowrap">
+          {[...NOTES, ...NOTES].map((note, i) => (
+            <span key={i} className="stencil !text-[10px] !text-white/30">
+              {note}
+            </span>
+          ))}
+        </div>
       </div>
 
       {/* Bottom padding clears the fixed admin button in the corner. */}
-      <footer className="mt-10 pb-16 text-center text-xs text-white/35">
-        Built by{" "}
-        <a
-          className="text-white/60 hover:text-teal hover:underline"
-          href="https://x.com/0xyuura"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Yuura
-        </a>{" "}
-        &amp;{" "}
-        <a
-          className="text-white/60 hover:text-teal hover:underline"
-          href="https://x.com/Bas_Basterx"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Baster
-        </a>
+      <footer className="mt-6 pb-16 text-center">
+        <span className="stencil !text-[10px]">
+          Built by{" "}
+          <a
+            className="text-white/60 hover:text-teal"
+            href="https://x.com/0xyuura"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Yuura
+          </a>
+          {" & "}
+          <a
+            className="text-white/60 hover:text-teal"
+            href="https://x.com/Bas_Basterx"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Baster
+          </a>
+        </span>
       </footer>
     </div>
   );

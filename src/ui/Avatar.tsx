@@ -6,20 +6,21 @@ interface Props {
   size?: number;
 }
 
-// Cosmetic mochi-style avatar: a colored disc (hue from the seed) with the
-// username initial. No external calls.
+// A driver badge: flat colour keyed off the seed, hard edge, initial set in the
+// timing font. The old glossy radial gradient was the one bit of chrome on an
+// otherwise painted-metal screen.
 export default function Avatar({ seed, name, size = 40 }: Props) {
   const n = Number(seed) || 0;
   const hue = n % 360;
-  const bg = `radial-gradient(circle at 35% 30%, ${hsl(hue, 85, 62)}, ${hsl(
-    (hue + 40) % 360,
-    80,
-    42,
-  )})`;
   return (
     <span
-      className="grid place-items-center rounded-full font-display font-bold text-void ring-2 ring-white/20 shrink-0"
-      style={{ width: size, height: size, background: bg, fontSize: size * 0.42 }}
+      className="grid place-items-center rounded-sm font-num font-bold text-void border border-black/50 shrink-0"
+      style={{
+        width: size,
+        height: size,
+        background: hsl(hue, 72, 58),
+        fontSize: size * 0.44,
+      }}
       aria-hidden
     >
       {(name[0] || "?").toUpperCase()}

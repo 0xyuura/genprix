@@ -37,11 +37,13 @@ export function drawScene(ctx: CanvasRenderingContext2D, s: SceneState): void {
   }
 
   drawSky(ctx, w, h, t);
-  const groundY = h * 0.66;
+  // Sits lower than it used to: at 0.66 a third of the frame was empty run-off
+  // under the kart, which just read as a dead black band.
+  const groundY = h * 0.7;
   drawHills(ctx, w, h, groundY, t);
   drawGround(ctx, w, h, groundY, s.progress, t);
-  drawCheckpoints(ctx, w, groundY, s.progress);
-  drawFinish(ctx, w, groundY, t);
+  drawCheckpoints(ctx, w, h, groundY, s.progress);
+  drawFinish(ctx, w, h, groundY);
 
   const kartX = w * (KART_START + (KART_END - KART_START) * s.progress);
   const kartY = groundY + h * 0.06;
@@ -51,53 +53,148 @@ export function drawScene(ctx: CanvasRenderingContext2D, s: SceneState): void {
 }
 
 function drawSky(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+  // A night circuit, not a synthwave poster. The purple-to-magenta sky with a
+  // radial sun in it was the most generic thing on the screen; what makes a
+  // racetrack look like a racetrack is floodlights, a full grandstand and a
+  // barrier, so the budget goes there instead.
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, "#0a0620");
-  g.addColorStop(0.45, "#1a0b3a");
-  g.addColorStop(1, "#2a0f52");
+  g.addColorStop(0, "#06060c");
+  g.addColorStop(1, "#0d0d18");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  // sun glow
-  const sunX = w * 0.72;
-  const sunY = h * 0.28;
-  const sg = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, h * 0.4);
-  sg.addColorStop(0, hexA(BRAND.magenta, 0.5));
-  sg.addColorStop(1, hexA(BRAND.magenta, 0));
-  ctx.fillStyle = sg;
-  ctx.fillRect(0, 0, w, h);
-
-  // stars
-  ctx.fillStyle = "rgba(255,255,255,0.7)";
-  for (let i = 0; i < 40; i++) {
+  // stars, dimmer than before so the floodlights are the brightest thing
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  for (let i = 0; i < 28; i++) {
     const x = (i * 97.13) % w;
-    const y = ((i * 53.7) % (h * 0.5));
-    const tw = 0.4 + 0.6 * Math.abs(Math.sin(t * 2 + i));
-    ctx.globalAlpha = tw * 0.8;
+    const y = (i * 53.7) % (h * 0.42);
+    ctx.globalAlpha = (0.3 + 0.5 * Math.abs(Math.sin(t * 1.6 + i))) * 0.7;
     ctx.fillRect(x, y, 2, 2);
   }
   ctx.globalAlpha = 1;
+
+  drawFloodlights(ctx, w, h, t);
 }
 
-function drawHills(ctx: CanvasRenderingContext2D, w: number, h: number, groundY: number, t: number) {
-  // two parallax layers of rolling hills
-  const layers = [
-    { color: "#3a1470", amp: h * 0.08, base: groundY - h * 0.02, speed: 14, wl: w * 0.5 },
-    { color: "#5a1f9e", amp: h * 0.05, base: groundY + h * 0.005, speed: 26, wl: w * 0.32 },
-  ];
-  for (const L of layers) {
-    ctx.fillStyle = L.color;
+/** Lighting masts behind the grandstand, each throwing a soft cone downward. */
+function drawFloodlights(ctx: CanvasRenderingContext2D, w: number, h: number, t: number) {
+  const masts = [0.16, 0.46, 0.79];
+  masts.forEach((fx, i) => {
+    const x = w * fx;
+    const headY = h * 0.1;
+    const footY = h * 0.6;
+    // Mains hum: each mast sits at its own brightness and drifts a little.
+    const lit = 0.72 + 0.1 * Math.sin(t * 2.3 + i * 2.1);
+
+    // cone of light
+    const cone = ctx.createLinearGradient(x, headY, x, footY);
+    cone.addColorStop(0, hexA("#cfe8ff", 0.1 * lit));
+    cone.addColorStop(1, hexA("#cfe8ff", 0));
+    ctx.fillStyle = cone;
     ctx.beginPath();
-    ctx.moveTo(0, h);
-    const off = (t * L.speed) % L.wl;
-    for (let x = -off; x <= w + L.wl; x += 6) {
-      const y = L.base - Math.abs(Math.sin((x / L.wl) * Math.PI)) * L.amp;
-      ctx.lineTo(x, y);
-    }
-    ctx.lineTo(w, h);
+    ctx.moveTo(x - 8, headY);
+    ctx.lineTo(x + 8, headY);
+    ctx.lineTo(x + h * 0.16, footY);
+    ctx.lineTo(x - h * 0.16, footY);
     ctx.closePath();
     ctx.fill();
+
+    // mast
+    ctx.strokeStyle = "#1b1b26";
+    ctx.lineWidth = Math.max(2, h * 0.008);
+    ctx.beginPath();
+    ctx.moveTo(x, headY);
+    ctx.lineTo(x, footY);
+    ctx.stroke();
+
+    // lamp bank: two rows of small squares
+    const lw = Math.max(3, h * 0.014);
+    for (let r = 0; r < 2; r++) {
+      for (let c = -2; c <= 2; c++) {
+        ctx.fillStyle = hexA("#f2f8ff", lit);
+        ctx.fillRect(x + c * (lw + 1.5) - lw / 2, headY - lw * (2 - r) - 2, lw, lw);
+      }
+    }
+  });
+}
+
+/**
+ * Grandstand and barrier. Replaces the two layers of purple hills: a venue with
+ * a crowd in it does more for "this is a race" than scenery does, and the seats
+ * give the scene something that moves without anything having to scroll fast.
+ */
+function drawHills(ctx: CanvasRenderingContext2D, w: number, h: number, groundY: number, t: number) {
+  // The stand has to finish well clear of the asphalt: the barrier and the kerb
+  // are both red-and-white, so if they touch they read as one striped smear.
+  const standTop = groundY - h * 0.46;
+  const standBottom = groundY - h * 0.21;
+  const roofDrop = h * 0.05; // the rake, left side higher than right
+
+  ctx.fillStyle = "#12121c";
+  ctx.beginPath();
+  ctx.moveTo(0, standBottom);
+  ctx.lineTo(0, standTop + roofDrop);
+  ctx.lineTo(w, standTop);
+  ctx.lineTo(w, standBottom);
+  ctx.closePath();
+  ctx.fill();
+
+  // Roof edge and the pillars holding it up. Structure is what separates a
+  // grandstand from a dark rectangle.
+  ctx.strokeStyle = "#262636";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, standTop + roofDrop);
+  ctx.lineTo(w, standTop);
+  ctx.stroke();
+  ctx.strokeStyle = "#1a1a26";
+  ctx.lineWidth = Math.max(2, w / 300);
+  for (let i = 1; i < 6; i++) {
+    const x = (w / 6) * i;
+    ctx.beginPath();
+    ctx.moveTo(x, standTop + roofDrop * (1 - x / w));
+    ctx.lineTo(x, standBottom);
+    ctx.stroke();
   }
+
+  // The crowd: dense enough to read as people. Each seat catches the light at
+  // its own moment, which is the only thing in the scene that moves when the
+  // kart is standing still.
+  const rows = 10;
+  const step = Math.max(5, w / 112);
+  for (let r = 0; r < rows; r++) {
+    const rowT = r / (rows - 1);
+    for (let c = 0; c * step < w; c++) {
+      const x = c * step + (r % 2) * (step / 2);
+      const top = standTop + roofDrop * (1 - x / w);
+      const y = top + (standBottom - top) * (0.16 + rowT * 0.78);
+      const seed = (c * 13 + r * 7) % 19;
+      const flick = 0.35 + 0.65 * Math.abs(Math.sin(t * 1.1 + seed));
+      // A few in GenLayer colours; the rest pale, like a night crowd.
+      const tone = seed % 8 === 0 ? BRAND.teal : seed % 11 === 0 ? BRAND.magenta : "#9a9ab2";
+      ctx.fillStyle = hexA(tone, 0.16 + flick * 0.34);
+      ctx.fillRect(x, y, 2, 2);
+    }
+  }
+
+  // Trackside barrier, hung on the front of the stand: white panels with red
+  // ends on a teal rail. It drifts slowly, so it parallaxes against the kerb.
+  const barH = Math.max(7, h * 0.032);
+  const barY = standBottom;
+  const seg = Math.max(30, w / 13);
+  const shift = (t * 8) % (seg * 2);
+  for (let x = -shift; x < w + seg; x += seg) {
+    ctx.fillStyle = Math.floor((x + shift) / seg) % 2 === 0 ? "#d8d8de" : BRAND.red;
+    ctx.fillRect(x, barY, seg - 2, barH);
+  }
+  ctx.fillStyle = hexA(BRAND.teal, 0.7);
+  ctx.fillRect(0, barY - 2, w, 2);
+  // A shadow under the barrier so the checkpoints in front of it read as nearer.
+  const sh = ctx.createLinearGradient(0, barY + barH, 0, barY + barH + h * 0.06);
+  sh.addColorStop(0, hexA("#000000", 0.55));
+  sh.addColorStop(1, hexA("#000000", 0));
+  ctx.fillStyle = sh;
+  ctx.fillRect(0, barY + barH, w, h * 0.06);
 }
 
 function drawGround(
@@ -108,62 +205,95 @@ function drawGround(
   progress: number,
   t: number,
 ) {
-  ctx.fillStyle = "#141018";
+  // run-off, then the asphalt
+  ctx.fillStyle = "#0b0b10";
   ctx.fillRect(0, groundY, w, h - groundY);
-  // asphalt band
   const trackTop = groundY + h * 0.02;
-  const trackH = h * 0.16;
-  ctx.fillStyle = "#26222c";
+  const trackH = h * 0.2;
+  ctx.fillStyle = "#1b1b21";
   ctx.fillRect(0, trackTop, w, trackH);
-  ctx.fillStyle = hexA("#000000", 0.35);
-  ctx.fillRect(0, trackTop, w, 4);
 
-  // scrolling center lane dashes (faster feel via progress + time)
-  const midY = trackTop + trackH * 0.5;
-  ctx.fillStyle = hexA(BRAND.amber, 0.85);
+  // Kerb along the top edge of the asphalt: the red-and-white blocks are the
+  // single most recognisable marking on any circuit, and they scroll, which is
+  // where most of the sense of speed comes from.
+  const kerbH = Math.max(4, h * 0.013);
+  const block = Math.max(16, w / 26);
+  const kShift = (t * 120 + progress * 900) % (block * 2);
+  for (let x = -kShift; x < w + block; x += block) {
+    ctx.fillStyle = Math.floor((x + kShift) / block) % 2 === 0 ? "#e6e6ea" : BRAND.red;
+    ctx.fillRect(x, trackTop - kerbH, block, kerbH);
+  }
+  ctx.fillStyle = hexA("#000000", 0.4);
+  ctx.fillRect(0, trackTop, w, 3);
+
+  // scrolling centre line (faster feel via progress + time)
+  const midY = trackTop + trackH * 0.55;
+  ctx.fillStyle = hexA("#e9e9ef", 0.8);
   const dash = 46;
   const gap = 40;
-  const shift = ((t * 220 + progress * 1600) % (dash + gap));
+  const shift = (t * 220 + progress * 1600) % (dash + gap);
   for (let x = -shift; x < w; x += dash + gap) {
-    ctx.fillRect(x, midY - 3, dash, 6);
+    ctx.fillRect(x, midY - 2.5, dash, 5);
   }
 }
 
-function drawCheckpoints(ctx: CanvasRenderingContext2D, w: number, groundY: number, progress: number) {
+/**
+ * Marshal posts, one per question. Sized off the canvas height like everything
+ * else in the scene: when these were fixed pixels they collided with the barrier
+ * at small sizes and floated free of the track at large ones.
+ */
+function drawCheckpoints(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  groundY: number,
+  progress: number,
+) {
   const reached = Math.round(progress * CHECKPOINTS);
+  const poleH = h * 0.1;
+  const r = Math.max(6, h * 0.024);
   for (let i = 1; i <= CHECKPOINTS; i++) {
     const x = w * (KART_START + (KART_END - KART_START) * (i / CHECKPOINTS));
     const done = i <= reached;
-    ctx.fillStyle = done ? BRAND.teal : hexA("#ffffff", 0.25);
-    ctx.fillRect(x - 3, groundY - 34, 6, 34);
+    ctx.fillStyle = done ? BRAND.teal : hexA("#ffffff", 0.22);
+    ctx.fillRect(x - 2, groundY - poleH, 4, poleH);
     ctx.beginPath();
-    ctx.arc(x, groundY - 40, 7, 0, Math.PI * 2);
-    ctx.fillStyle = done ? BRAND.green : hexA("#ffffff", 0.3);
+    ctx.arc(x, groundY - poleH - r * 0.7, r, 0, Math.PI * 2);
+    ctx.fillStyle = done ? BRAND.green : "#20202c";
     ctx.fill();
-    ctx.fillStyle = hexA("#000", 0.6);
-    ctx.font = "bold 10px 'Space Grotesk', sans-serif";
+    ctx.strokeStyle = done ? hexA("#000000", 0.5) : hexA("#ffffff", 0.28);
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = done ? hexA("#000000", 0.7) : hexA("#ffffff", 0.5);
+    ctx.font = `bold ${Math.round(r * 1.15)}px 'Chakra Petch', sans-serif`;
     ctx.textAlign = "center";
-    ctx.fillText(String(i), x, groundY - 37);
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(i), x, groundY - poleH - r * 0.7 + 0.5);
   }
   ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
 }
 
-function drawFinish(ctx: CanvasRenderingContext2D, w: number, groundY: number, _t: number) {
-  const x = w * 0.88;
-  const top = groundY - 70;
-  ctx.fillStyle = "#ddd";
-  ctx.fillRect(x, top, 4, 70);
-  // checkered flag
+/** The finish gantry: a post with the chequered board bolted to it. */
+function drawFinish(ctx: CanvasRenderingContext2D, w: number, h: number, groundY: number) {
+  const x = w * 0.9;
+  const postH = h * 0.19;
+  const top = groundY - postH;
+  ctx.fillStyle = "#d8d8de";
+  ctx.fillRect(x, top, Math.max(3, h * 0.009), postH);
+
+  const cell = Math.max(6, h * 0.026);
   const cols = 4;
   const rows = 3;
-  const cw = 9;
-  const ch = 9;
-  for (let r = 0; r < rows; r++) {
+  for (let rr = 0; rr < rows; rr++) {
     for (let c = 0; c < cols; c++) {
-      ctx.fillStyle = (r + c) % 2 === 0 ? "#fff" : "#111";
-      ctx.fillRect(x + 4 + c * cw, top + r * ch, cw, ch);
+      ctx.fillStyle = (rr + c) % 2 === 0 ? "#f2f2f6" : "#101018";
+      ctx.fillRect(x + Math.max(3, h * 0.009) + c * cell, top + rr * cell, cell, cell);
     }
   }
+  ctx.strokeStyle = hexA("#000000", 0.5);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + Math.max(3, h * 0.009), top, cell * cols, cell * rows);
 }
 
 function drawKart(
@@ -343,12 +473,28 @@ function drawExpression(ctx: CanvasRenderingContext2D, cx: number, cy: number, m
     ctx.stroke();
   }
 
-  // floating reaction icon, bobbing
+  // A marshal's flag rather than an emoji: green when the answer landed, yellow
+  // when it did not. Emoji render as a different picture on every OS, which is
+  // the last thing you want as the game's one piece of feedback.
   const bob = Math.sin(t * 6) * 3;
-  ctx.font = "28px system-ui, 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(mood === "happy" ? "😄" : "😡", 34, -30 + bob);
+  const fy = -34 + bob;
+  ctx.save();
+  ctx.strokeStyle = "#e9e9ef";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(40, fy + 26);
+  ctx.lineTo(40, fy - 8);
+  ctx.stroke();
+  ctx.fillStyle = mood === "happy" ? BRAND.green : BRAND.amber;
+  ctx.beginPath();
+  ctx.moveTo(41, fy - 8);
+  // a wave in the cloth, so the flag looks held up rather than pasted on
+  ctx.quadraticCurveTo(56, fy - 4 + Math.sin(t * 9) * 3, 70, fy - 7);
+  ctx.lineTo(70, fy + 9);
+  ctx.quadraticCurveTo(56, fy + 12 + Math.sin(t * 9) * 3, 41, fy + 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
   ctx.restore();
 }
 

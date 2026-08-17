@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { checkAnswer, maskAnswer, type Question } from "./quiz";
-import { runScore, SESSION_MS, HINTS_PER_SESSION, QUESTION_COUNT } from "./scoring";
+import {
+  runScore,
+  SESSION_MS,
+  HINTS_PER_SESSION,
+  QUESTION_COUNT,
+  POINTS_PER_CORRECT,
+} from "./scoring";
 import {
   addPassage,
   applyInput,
@@ -47,7 +53,10 @@ export interface GameState {
   board: BoardQuestion[];
   selected: number | null; // open question index; null = the question board
   solvedCount: number;
-  score: number; // running base score (solved × 100); final run adds the bonuses
+  // Running base score: solved × POINTS_PER_CORRECT. The bonuses land at the end,
+  // so this has to use the same constant the final score does — showing a tenth of
+  // the real number for the whole run is worse than showing nothing.
+  score: number;
   hintsLeft: number;
   mood: Mood;
   lastResult: LastResult | null; // feedback for the currently open question
@@ -237,8 +246,16 @@ export function useGame() {
 
   const backToBoard = useCallback(() => {
     if (returnTimer.current) clearTimeout(returnTimer.current);
+    // After the last checkpoint, that timer *is* the end of the run. Cancelling it
+    // used to leave a finished player stuck on a completed grid while the clock ran
+    // down and their time bonus drained away, which is the opposite of what the
+    // standings reward. Leaving the panel early now just ends the run sooner.
+    if (stateRef.current.solvedCount >= QUESTION_COUNT) {
+      finish();
+      return;
+    }
     setState((s) => ({ ...s, selected: null, lastResult: null }));
-  }, []);
+  }, [finish]);
 
   // Typeracer stage: fold each keystroke into the open question's buffer. Completing
   // the passage banks its typing stats and unlocks the answer field.
@@ -293,7 +310,7 @@ export function useGame() {
           ...st,
           board,
           solvedCount: newSolved,
-          score: newSolved * 100,
+          score: newSolved * POINTS_PER_CORRECT,
           fxEvent,
           lastResult: { correct: true, correctAnswer: q.accepted[0] },
         }));

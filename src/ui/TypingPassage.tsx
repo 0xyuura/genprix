@@ -6,14 +6,17 @@ interface Props {
   typed: string;
 }
 
+// Brightness runs the other way from most typing UIs on purpose: the text you
+// still owe is the most legible, and the part already typed fades like track
+// behind the kart. Colouring every typed character green looks busy and makes
+// the characters that matter compete with the ones that no longer do.
 const cls: Record<CharState, string> = {
-  // Already typed correctly — dimmed, like the part of the track behind you.
-  correct: "text-good/90",
-  // Wrong character sitting in the buffer; it must be backspaced away to move on.
-  wrong: "text-bad bg-bad/25 rounded-[2px]",
-  // The character you owe next.
-  current: "text-ceramic bg-teal/40 rounded-[2px] animate-pulse",
-  pending: "text-white/40",
+  correct: "text-white/30",
+  // Sitting in the buffer and blocking progress until it is backspaced away.
+  wrong: "text-void bg-bad",
+  // The character owed next: a solid block cursor, no blinking.
+  current: "text-void bg-teal",
+  pending: "text-ceramic",
 };
 
 /**
@@ -25,7 +28,7 @@ function TypingPassage({ target, typed }: Props) {
   const states = charStates(target, typed);
   return (
     <p
-      className="font-mono text-base sm:text-lg leading-relaxed whitespace-pre-wrap break-words select-none"
+      className="font-num text-base sm:text-lg leading-[1.7] whitespace-pre-wrap break-words select-none"
       aria-label={target}
     >
       {[...target].map((ch, i) => (

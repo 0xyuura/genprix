@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { selectAdapter, msUntilNextHour, type Entry } from "../data/leaderboard";
 import { isSecureMode } from "../data/supabase";
 import Avatar from "./Avatar";
+import { Chequer } from "./Glyph";
 
 interface Props {
   onBack: () => void;
@@ -26,7 +27,7 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
         const top = await selectAdapter().top(25);
         if (alive) setEntries(top);
       } catch {
-        if (alive) setError("Couldn't load the leaderboard.");
+        if (alive) setError("Couldn't load the times.");
       }
     })();
     const t = setInterval(() => setResetIn(msUntilNextHour()), 1000);
@@ -38,74 +39,93 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="font-display font-bold text-3xl text-ceramic">Leaderboard</h2>
-        <button className="text-teal hover:underline" onClick={onBack}>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="font-display font-bold uppercase tracking-[0.1em] text-2xl text-ceramic flex items-center gap-2.5">
+          <Chequer size={18} className="text-ceramic" />
+          Timing tower
+        </h1>
+        <button className="stencil hover:text-teal transition-colors" onClick={onBack}>
           ← Back
         </button>
       </div>
 
-      <div className="flex items-center justify-between mb-2 text-xs">
-        <span className="text-white/40">
-          {isSecureMode() ? "Global · server-verified" : "Local demo · this device only"}
-        </span>
-        <span className="font-display text-amber">♻ resets in {fmt(resetIn)}</span>
+      <div className="panel">
+        <div className="flex items-center justify-between border-b border-line px-3 py-2">
+          <span className="stencil">{isSecureMode() ? "Server timing" : "This device only"}</span>
+          <span className="stencil !text-amber">Wipes in {fmt(resetIn)}</span>
+        </div>
+
+        <p className="px-3 py-2.5 text-xs text-white/45 border-b border-line">
+          Checkpoints first, then the time you had left, then how cleanly you typed.
+        </p>
+
+        {/* Column headers, so the numbers in each row are readable as data. */}
+        <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 border-b border-line bg-pitlight">
+          <span className="stencil !text-[9px] w-7 text-center">Pos</span>
+          <span className="stencil !text-[9px] w-9" />
+          <span className="stencil !text-[9px] flex-1">Driver</span>
+          <span className="stencil !text-[9px] w-10 text-right">Chk</span>
+          <span className="stencil !text-[9px] w-14 text-right">Time</span>
+          <span className="stencil !text-[9px] w-10 text-right hidden md:inline">Acc</span>
+          <span className="stencil !text-[9px] w-14 text-right hidden lg:inline">Speed</span>
+          <span className="stencil !text-[9px] w-16 text-right">Points</span>
+        </div>
+
+        {error && <p className="px-3 py-4 text-bad text-sm">{error}</p>}
+        {!entries && !error && <p className="px-3 py-4 text-white/45 text-sm">Loading times…</p>}
+        {entries && entries.length === 0 && (
+          <p className="px-3 py-4 text-white/45 text-sm">Nobody has set a time this hour.</p>
+        )}
+
+        <ol>
+          {entries?.map((e, i) => {
+            const me = highlightUser && e.username === highlightUser;
+            const lead = i === 0;
+            return (
+              <li
+                key={`${e.username}-${i}`}
+                className={`tower-row ${me ? "bg-teal/[0.08]" : ""} ${
+                  lead ? "bg-purple/[0.12]" : ""
+                }`}
+              >
+                <span
+                  className={`num font-bold w-7 text-center ${
+                    lead ? "text-purple" : "text-white/40"
+                  }`}
+                >
+                  {i + 1}
+                </span>
+                <Avatar seed={e.avatarSeed} name={e.username} size={30} />
+                <span className="font-semibold text-ceramic truncate flex-1">
+                  {e.username}
+                  {me && <span className="stencil !text-[9px] !text-teal ml-2">you</span>}
+                </span>
+                <span
+                  className={`num text-sm w-10 text-right ${
+                    e.correct === 10 ? "text-good" : "text-white/45"
+                  }`}
+                >
+                  {e.correct}/10
+                </span>
+                <span className="num text-sm text-white/60 w-14 text-right">
+                  {(e.totalMs / 1000).toFixed(1)}s
+                </span>
+                <span className="num text-sm text-white/45 w-10 text-right hidden md:inline">
+                  {e.accuracy != null ? `${Math.round(e.accuracy * 100)}%` : "—"}
+                </span>
+                <span className="num text-sm text-white/45 w-14 text-right hidden lg:inline">
+                  {e.wpm != null ? `${e.wpm}wpm` : "—"}
+                </span>
+                <span
+                  className={`num font-bold w-16 text-right ${lead ? "text-purple" : "text-teal"}`}
+                >
+                  {e.score.toLocaleString()}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
       </div>
-      <p className="text-xs text-white/40 mb-4">
-        Ranked by questions solved first, then by how much of the 10 minutes you had left, then by
-        how exactly you typed. Finish the whole game fast with no typos and you take first.
-      </p>
-
-      {error && <p className="text-bad">{error}</p>}
-      {!entries && !error && <p className="text-white/50">Loading…</p>}
-      {entries && entries.length === 0 && (
-        <p className="text-white/50">No racers this hour yet. Be the first.</p>
-      )}
-
-      <ol className="space-y-2">
-        {entries?.map((e, i) => {
-          const me = highlightUser && e.username === highlightUser;
-          return (
-            <li
-              key={`${e.username}-${i}`}
-              className={`panel flex items-center gap-3 p-3 ${me ? "ring-2 ring-teal" : ""}`}
-            >
-              <span
-                className={`font-display font-bold w-8 text-center ${
-                  i === 0 ? "text-amber text-xl" : "text-white/50"
-                }`}
-              >
-                {i + 1}
-              </span>
-              <Avatar seed={e.avatarSeed} name={e.username} size={36} />
-              <span className="font-semibold text-ceramic truncate flex-1">{e.username}</span>
-              <span
-                className={`text-sm hidden sm:inline ${
-                  e.correct === 10 ? "text-good" : "text-white/50"
-                }`}
-              >
-                {e.correct}/10
-              </span>
-              <span className="text-white/50 text-sm hidden sm:inline tabular-nums">
-                {(e.totalMs / 1000).toFixed(1)}s
-              </span>
-              {e.accuracy != null && (
-                <span className="text-white/50 text-sm hidden md:inline font-mono tabular-nums">
-                  {Math.round(e.accuracy * 100)}%
-                </span>
-              )}
-              {e.wpm != null && (
-                <span className="text-white/50 text-sm hidden lg:inline font-mono tabular-nums">
-                  {e.wpm} wpm
-                </span>
-              )}
-              <span className="font-display font-bold text-teal tabular-nums">
-                {e.score.toLocaleString()}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
     </div>
   );
 }

@@ -10,6 +10,12 @@ interface Props {
   accuracy: number; // 0..1
 }
 
+/**
+ * The pit wall: session clock, the ten checkpoints as a sector strip, and the
+ * telemetry a player can act on. Under a minute the whole bar goes to caution
+ * stripes rather than pulsing red text, because a flashing number is hard to
+ * read at exactly the moment reading it matters most.
+ */
 export default function Hud({
   remainingMs,
   score,
@@ -20,41 +26,63 @@ export default function Hud({
   accuracy,
 }: Props) {
   const danger = remainingMs <= 60_000;
+  const [mins, secs] = formatClock(remainingMs).split(":");
+
   return (
-    <div className="flex items-center justify-between gap-3 flex-wrap">
-      <div className="flex items-center gap-2">
-        <span
-          className={`font-display font-bold text-2xl tabular-nums ${
-            danger ? "text-bad animate-pulse" : "text-ceramic"
+    <div
+      className={`panel flex items-stretch divide-x divide-line overflow-hidden ${
+        danger ? "caution-stripe border-flag/50" : ""
+      }`}
+    >
+      <div className="px-3 py-2">
+        <div className="stencil !text-[10px]">Time left</div>
+        <div
+          className={`num font-bold text-2xl leading-none mt-0.5 ${
+            danger ? "text-flag" : "text-ceramic"
           }`}
         >
-          ⏱ {formatClock(remainingMs)}
-        </span>
-        <span className="text-xs text-white/40">left</span>
+          {mins}
+          <span className="tick">:</span>
+          {secs}
+        </div>
       </div>
 
-      <div className="flex-1 min-w-[140px] max-w-xs">
-        <div className="flex justify-between text-xs text-white/50 mb-1">
-          <span>
-            Solved {solvedCount}/{total}
+      <div className="px-3 py-2 flex-1 min-w-[132px]">
+        <div className="flex items-baseline justify-between">
+          <span className="stencil !text-[10px]">Checkpoints</span>
+          <span className="num text-xs text-white/60">
+            {solvedCount}/{total}
           </span>
-          <span>💡 {hintsLeft} hints</span>
         </div>
-        <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-teal to-good transition-all duration-500"
-            style={{ width: `${(solvedCount / total) * 100}%` }}
-          />
+        {/* One cell per question: filled means claimed. A segmented strip tells
+            you which lap you are on; a smooth gradient bar does not. */}
+        <div className="mt-1.5 flex gap-[3px]" aria-hidden>
+          {Array.from({ length: total }, (_, i) => (
+            <span
+              key={i}
+              className={`h-2.5 flex-1 ${i < solvedCount ? "bg-good" : "bg-white/10"}`}
+            />
+          ))}
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <span className="font-mono text-xs text-white/50 tabular-nums">
-          ⌨ {Math.round(wpm)} wpm · {Math.round(accuracy * 100)}%
-        </span>
-        <span className="font-display font-bold text-xl text-teal tabular-nums">
-          {score.toLocaleString()} <span className="text-white/40 text-sm">pts</span>
-        </span>
+      <div className="px-3 py-2 hidden sm:block">
+        <div className="stencil !text-[10px]">Typing</div>
+        <div className="num text-sm text-white/70 mt-1">
+          {Math.round(wpm)} wpm · {Math.round(accuracy * 100)}%
+        </div>
+      </div>
+
+      <div className="px-3 py-2 hidden sm:block">
+        <div className="stencil !text-[10px]">Hints</div>
+        <div className="num text-sm text-white/70 mt-1">{hintsLeft} left</div>
+      </div>
+
+      <div className="px-3 py-2 text-right">
+        <div className="stencil !text-[10px]">Points</div>
+        <div className="num font-bold text-xl text-teal leading-none mt-1">
+          {score.toLocaleString()}
+        </div>
       </div>
     </div>
   );
