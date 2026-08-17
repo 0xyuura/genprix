@@ -76,8 +76,8 @@ body {
   .stencil {
     @apply font-display font-bold uppercase tracking-[0.18em] text-[11px] text-white/45;
   }
-  /* One row of the timing tower. */
-  .tower-row {
+  /* One row of the leaderboard. */
+  .board-row {
     @apply flex items-center gap-3 border-b border-line/70 px-3 py-2
       transition-colors hover:bg-pitlight;
   }

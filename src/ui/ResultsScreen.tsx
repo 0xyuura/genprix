@@ -41,7 +41,7 @@ export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }:
           <Avatar seed={state.avatarSeed} name={state.username} size={52} />
           <div className="min-w-0">
             <h1 className="font-display font-bold uppercase tracking-[0.1em] text-2xl text-ceramic leading-none">
-              {perfect ? "Clean sweep" : "Chequered flag"}
+              {perfect ? "Clean sweep" : "Race complete"}
             </h1>
             <p className="text-sm text-white/55 mt-1 truncate">
               {perfect
@@ -100,7 +100,7 @@ export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }:
           onClick={onShowLeaderboard}
         >
           <Chequer size={14} />
-          Timing tower
+          Leaderboard
         </button>
       </div>
     </div>

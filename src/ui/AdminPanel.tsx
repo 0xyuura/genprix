@@ -114,7 +114,7 @@ export default function AdminPanel({ onBack }: Props) {
         <div className="panel-kerb max-w-sm">
           <div className="px-4 pt-5 pb-4">
             <h1 className="font-display font-bold uppercase tracking-[0.1em] text-xl text-ceramic">
-              Race control
+              Host controls
             </h1>
             <p className="stencil mt-1">
               {secure ? "Passcode verified on the server" : "Passcode checked on this device"}
@@ -170,7 +170,7 @@ export default function AdminPanel({ onBack }: Props) {
       <p className="text-xs text-white/45 mb-4">
         Edit the ten questions, then open a room. Players retype each question before they answer
         it. A code runs 15 minutes and seats {ROOM_CAPACITY} players at one run each; once the time
-        is up the quiz is over and you open a new one. The tower wipes on the hour.
+        is up the quiz is over and you open a new one. The leaderboard resets on the hour.
       </p>
 
       {code && (

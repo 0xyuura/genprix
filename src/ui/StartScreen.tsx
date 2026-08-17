@@ -24,8 +24,8 @@ function hostCode(): string | null {
 const NOTES = [
   "Track limits: a wrong character parks the kart until you backspace it",
   "Pit note: a hint shows the first and last letter of the answer",
-  "Classification: checkpoints first, then the clock, then how cleanly you typed",
-  "Session: the board wipes at the top of every hour",
+  "Ranking: correct answers first, then the clock, then how cleanly you typed",
+  "Leaderboard: resets at the top of every hour",
 ];
 
 interface Props {
@@ -157,7 +157,7 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
             autoFocus
           />
           <button className="btn-arcade w-full sm:w-auto" disabled={!valid} onClick={() => onJoin(name, code)}>
-            Go to the grid
+            Join the race
           </button>
         </div>
       ) : !joining ? (
@@ -174,7 +174,7 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
         </div>
       ) : (
         <div className="mt-5 space-y-3">
-          <p className="stencil">Sign on</p>
+          <p className="stencil">Join a game</p>
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               className="input-arcade sm:flex-1"
@@ -199,7 +199,7 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
             />
           </div>
           <button className="btn-arcade w-full sm:w-auto" disabled={!valid} onClick={() => onJoin(name, code)}>
-            Go to the grid
+            Join the race
           </button>
           {roomOpen === false && (
             <p className="text-xs text-white/35">
@@ -221,7 +221,7 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
         onClick={onShowLeaderboard}
       >
         <Chequer size={13} />
-        Timing tower
+        Leaderboard
       </button>
 
       {/* Pit-wall ticker: the rules, moving, where a marketing strapline would

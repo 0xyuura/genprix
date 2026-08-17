@@ -27,7 +27,7 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
         const top = await selectAdapter().top(25);
         if (alive) setEntries(top);
       } catch {
-        if (alive) setError("Couldn't load the times.");
+        if (alive) setError("Couldn't load the scores.");
       }
     })();
     const t = setInterval(() => setResetIn(msUntilNextHour()), 1000);
@@ -42,29 +42,45 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
       <div className="flex items-center justify-between mb-4">
         <h1 className="font-display font-bold uppercase tracking-[0.1em] text-2xl text-ceramic flex items-center gap-2.5">
           <Chequer size={18} className="text-ceramic" />
-          Timing tower
+          Leaderboard
         </h1>
         <button className="stencil hover:text-teal transition-colors" onClick={onBack}>
           ← Back
         </button>
       </div>
 
+      {/* A community quiz stands on everyone reading the same board, so when the
+          board is not actually shared, say it outright instead of hiding it in a
+          three-word label. The host is the one who can fix it, and this tells them
+          exactly what to do. */}
+      {!isSecureMode() && (
+        <div className="panel caution-stripe border-flag/40 px-3 py-2.5 mb-3">
+          <p className="stencil !text-flag">Scores are not shared yet</p>
+          <p className="text-xs text-white/70 mt-1">
+            This board is stored in your own browser, so every player currently sees only their
+            own run. Connect a database and the same board opens for everybody, on every device.
+          </p>
+        </div>
+      )}
+
       <div className="panel">
         <div className="flex items-center justify-between border-b border-line px-3 py-2">
-          <span className="stencil">{isSecureMode() ? "Server timing" : "This device only"}</span>
-          <span className="stencil !text-amber">Wipes in {fmt(resetIn)}</span>
+          <span className={`stencil ${isSecureMode() ? "!text-good" : ""}`}>
+            {isSecureMode() ? "Shared board · everyone sees this" : "This browser only"}
+          </span>
+          <span className="stencil !text-amber">Resets in {fmt(resetIn)}</span>
         </div>
 
         <p className="px-3 py-2.5 text-xs text-white/45 border-b border-line">
-          Checkpoints first, then the time you had left, then how cleanly you typed.
+          Ranked by correct answers first, then the time you had left, then how cleanly you typed.
         </p>
 
         {/* Column headers, so the numbers in each row are readable as data. */}
         <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 border-b border-line bg-pitlight">
-          <span className="stencil !text-[9px] w-7 text-center">Pos</span>
+          <span className="stencil !text-[9px] w-7 text-center">Rank</span>
           <span className="stencil !text-[9px] w-9" />
-          <span className="stencil !text-[9px] flex-1">Driver</span>
-          <span className="stencil !text-[9px] w-10 text-right">Chk</span>
+          <span className="stencil !text-[9px] flex-1">Player</span>
+          <span className="stencil !text-[9px] w-10 text-right">Correct</span>
           <span className="stencil !text-[9px] w-14 text-right">Time</span>
           <span className="stencil !text-[9px] w-10 text-right hidden md:inline">Acc</span>
           <span className="stencil !text-[9px] w-14 text-right hidden lg:inline">Speed</span>
@@ -72,9 +88,9 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
         </div>
 
         {error && <p className="px-3 py-4 text-bad text-sm">{error}</p>}
-        {!entries && !error && <p className="px-3 py-4 text-white/45 text-sm">Loading times…</p>}
+        {!entries && !error && <p className="px-3 py-4 text-white/45 text-sm">Loading scores…</p>}
         {entries && entries.length === 0 && (
-          <p className="px-3 py-4 text-white/45 text-sm">Nobody has set a time this hour.</p>
+          <p className="px-3 py-4 text-white/45 text-sm">No scores this hour yet.</p>
         )}
 
         <ol>
@@ -84,7 +100,7 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
             return (
               <li
                 key={`${e.username}-${i}`}
-                className={`tower-row ${me ? "bg-teal/[0.08]" : ""} ${
+                className={`board-row ${me ? "bg-teal/[0.08]" : ""} ${
                   lead ? "bg-purple/[0.12]" : ""
                 }`}
               >

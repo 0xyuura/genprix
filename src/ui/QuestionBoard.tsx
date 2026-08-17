@@ -34,7 +34,7 @@ function QuestionBoard({ board, onSelect }: Props) {
     <section className="panel">
       <div className="flex items-baseline justify-between border-b border-line px-4 py-3">
         <h2 className="font-display font-bold uppercase tracking-[0.12em] text-ceramic">
-          The grid
+          Questions
         </h2>
         <span className="stencil">
           {left} {left === 1 ? "checkpoint" : "checkpoints"} to go

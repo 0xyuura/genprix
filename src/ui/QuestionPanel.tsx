@@ -69,10 +69,10 @@ function QuestionPanel({
       <div className="flex items-center justify-between border-b border-line px-4 pt-4 pb-3">
         <h2 className="font-display font-bold uppercase tracking-[0.12em] text-ceramic">
           <span className="num text-white/35 mr-2">{String(index + 1).padStart(2, "0")}</span>
-          Checkpoint
+          Question
         </h2>
         <button className="stencil hover:text-teal transition-colors" onClick={onBack}>
-          ← The grid
+          ← All questions
         </button>
       </div>
 
@@ -160,7 +160,7 @@ function QuestionPanel({
           <div className="border border-good/40 bg-good/10 px-4 py-3 animate-sweep">
             <p className="font-display font-bold uppercase tracking-[0.1em] text-good flex items-center gap-2">
               <Check size={15} />
-              Checkpoint claimed
+              Correct
               <span className="num ml-auto">+1,000</span>
             </p>
           </div>
