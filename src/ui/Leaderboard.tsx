@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { selectAdapter, msUntilNextHour, type Entry } from "../data/leaderboard";
 import { isSecureMode } from "../data/supabase";
+import { ROOM_CAPACITY } from "../data/rooms";
 import Avatar from "./Avatar";
 import { Chequer } from "./Glyph";
 
@@ -24,7 +25,10 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
     let alive = true;
     (async () => {
       try {
-        const top = await selectAdapter().top(25);
+        // Every player who finished this hour, not a top-25 slice. A code seats
+        // ROOM_CAPACITY racers, so cutting the list at 25 hid everyone else from
+        // a board whose whole point is that the community can read it.
+        const top = await selectAdapter().top(ROOM_CAPACITY);
         if (alive) setEntries(top);
       } catch {
         if (alive) setError("Couldn't load the scores.");
@@ -67,6 +71,13 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
         <div className="flex items-center justify-between border-b border-line px-3 py-2">
           <span className={`stencil ${isSecureMode() ? "!text-good" : ""}`}>
             {isSecureMode() ? "Shared board · everyone sees this" : "This browser only"}
+            {entries && entries.length > 0 && (
+              <span className="!text-white/45">
+                {" · "}
+                <span className="num">{entries.length}</span>{" "}
+                {entries.length === 1 ? "player" : "players"}
+              </span>
+            )}
           </span>
           <span className="stencil !text-amber">Resets in {fmt(resetIn)}</span>
         </div>
@@ -93,7 +104,9 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
           <p className="px-3 py-4 text-white/45 text-sm">No scores this hour yet.</p>
         )}
 
-        <ol>
+      {/* A full field is a thousand rows, so the list scrolls inside the panel
+          instead of turning the page into a mile of names. */}
+      <ol className="max-h-[62vh] overflow-y-auto">
           {entries?.map((e, i) => {
             const me = highlightUser && e.username === highlightUser;
             const lead = i === 0;
