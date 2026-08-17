@@ -83,10 +83,15 @@ create index if not exists scores_hour_rank on scores (hour_bucket, score desc, 
 -- Admin-created game rooms. The ACTIVE room is the newest one; its share code is
 -- how players join. Players cannot start a game unless an active room exists.
 --
--- A code is SINGLE USE: it hosts exactly one game. finish_run flips the room to
--- 'done', after which the code can never start another round, and join_room also
--- refuses a name that has already raced in that room. Hosts create a fresh room
--- per round — that is what stops replaying the same questions to farm the board.
+-- A code is a SESSION: it opens for ROOM_TTL (15 minutes) and seats ROOM_CAPACITY
+-- (1000) players, one run each. It ends when the clock or the seats run out —
+-- never because somebody finished, since a code is meant to carry a crowd through
+-- the same questions at once. join_room still refuses a name that already raced in
+-- that room, which is what stops replaying the questions to farm the board. Hosts
+-- create a fresh room for the next round.
+--
+-- Both limits are enforced here, on the server's own clock and its own count, so
+-- neither can be argued with from a browser.
 create table if not exists rooms (
   code       text primary key,
   round      int  not null,
@@ -94,9 +99,26 @@ create table if not exists rooms (
   closed_at  timestamptz,
   created_at timestamptz not null default now()
 );
--- Upgrade path for databases created before the single-use rule shipped.
+-- Legacy columns from when a finished run retired the code. Nothing writes them
+-- now; they are left in place rather than dropped out from under a live database.
+-- A room an old build marked 'done' stays unjoinable regardless: it is long past
+-- its 15 minutes.
 alter table rooms add column if not exists status    text not null default 'open';
 alter table rooms add column if not exists closed_at timestamptz;
+
+-- The two limits, in one place so the RPCs below cannot drift apart.
+create or replace function room_ttl() returns interval
+  language sql immutable as $$ select interval '15 minutes' $$;
+create or replace function room_capacity() returns int
+  language sql immutable as $$ select 1000 $$;
+
+-- Is this room still taking players? Clock and seats, nothing else.
+create or replace function room_is_live(p_room rooms)
+returns boolean language sql stable
+security definer set search_path = public, pg_temp as $$
+  select p_room.created_at > now() - room_ttl()
+     and (select count(*) from runs where round = p_room.round) < room_capacity();
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security: default-deny everywhere. Anon reads only via views/config.
@@ -223,7 +245,11 @@ create or replace function get_active_room()
 returns jsonb language sql stable
 security definer set search_path = public, pg_temp as $$
   select jsonb_build_object(
-    'open', exists (select 1 from rooms where status = 'open')
+    'open', exists (
+      select 1 from rooms r
+      where r.created_at = (select max(created_at) from rooms)
+        and room_is_live(r)
+    )
   );
 $$;
 
@@ -247,15 +273,19 @@ begin
   if v_active.code <> upper(trim(coalesce(p_code, ''))) then
     raise exception 'room not found or closed';
   end if;
-  -- Single use: the code dies with the run it hosted.
-  if v_active.status <> 'open' then
-    raise exception 'this code has already been played — ask the host for a new code';
+  -- The clock, then the player, then the seats: a returning name deserves the
+  -- reason that is actually about them, not "room full".
+  if v_active.created_at <= now() - room_ttl() then
+    raise exception 'this quiz has ended — a code runs for 15 minutes, ask the host for a new code';
   end if;
   if exists (
     select 1 from runs
     where round = v_active.round and lower(trim(username)) = lower(v_name)
   ) then
     raise exception 'you already raced in this room — ask the host for a new code';
+  end if;
+  if (select count(*) from runs where round = v_active.round) >= room_capacity() then
+    raise exception 'this room is full — ask the host for a new code';
   end if;
   if not exists (select 1 from questions where round = v_active.round and order_idx = 0) then
     raise exception 'room has no questions';
@@ -373,9 +403,8 @@ begin
     update runs set finished = true, finished_at = now() where id = v_run.id;
     insert into scores (round, username, avatar_seed, score, correct, total_ms, hour_bucket)
     values (v_run.round, v_run.username, v_run.avatar_seed, v_score, v_run.correct, v_total, v_bucket);
-    -- Burn the room code: one code hosts one game, so no second round can start.
-    update rooms set status = 'done', closed_at = now()
-    where round = v_run.round and status = 'open';
+    -- The room is deliberately left open: everyone else holding this code still
+    -- has to be able to race. It closes on its own clock, or when the seats fill.
   else
     v_total  := floor(extract(epoch from (v_run.finished_at - v_run.server_started_at)) * 1000)::int;
     v_bucket := floor(extract(epoch from v_run.finished_at) / 3600)::bigint;
@@ -540,6 +569,10 @@ $$;
 -- ---------------------------------------------------------------------------
 -- Grants: expose only the intended RPCs to anon. Revoke the rest from public.
 -- ---------------------------------------------------------------------------
+-- The room limits are internals of the RPCs below; anon never calls them directly.
+revoke all on function room_ttl()                      from public;
+revoke all on function room_capacity()                 from public;
+revoke all on function room_is_live(rooms)             from public;
 revoke all on function normalize_text(text)            from public;
 revoke all on function answer_matches(text, text[])     from public;
 revoke all on function admin_check_lockout()            from public;

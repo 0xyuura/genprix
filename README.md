@@ -40,9 +40,10 @@ Built for the GenLayer community.
 - **Codes expire after 15 minutes** — the creation minute is baked into the code itself,
   so every device agrees on the deadline; a guest cannot refresh their way into more time.
   Past that, the code is refused with an explanation.
-- **One code, one game** — a room is **single use**. It is burned the moment a run ends,
-  and a name that already raced in it cannot rejoin, so the same room can never host a
-  second round on that device. Hosts create a fresh room per round.
+- **One code, up to 1000 racers** — a code is a session, not a ticket. Finishing does not
+  close it, so everyone the host shared it with can still race; it ends only when the 15
+  minutes run out or the 1000th player joins. A name that already raced in the room cannot
+  go again, so nobody farms the board by replaying. Hosts create a fresh room per round.
 - **Username only** — no wallet, no sign-up. Just a name (auto mochi avatar).
 - **Speed leaderboard** — first place goes to whoever completes the game fastest with
   the most exact typing, and the board reads down from there until the clock runs out.
@@ -95,9 +96,10 @@ A **"Global board"** badge on the start screen confirms secure mode is on.
 ### Hosting a game
 🔒 (bottom-right) → passcode → edit the 10 questions → **Create room & get code** → **Copy
 invite link**. Share that link. Players open it, type a username, and race those questions.
-The room covers one game only and the code dies 15 minutes after you create it, so make it
-when your players are ready, not before. The panel counts the time down for you. The
-leaderboard resets at the top of every hour.
+The code dies 15 minutes after you create it, so make it when your players are ready, not
+before. Until then it seats up to 1000 racers, one run each — the panel counts down the time
+and the seats left, and says **Quiz ended** when the round is over so you know to create a
+new one. The leaderboard resets at the top of every hour.
 
 **The code carries the room.** In local/demo mode there is no server to look a room up in,
 so a plain label would mean nothing on a phone that has never seen it. The code itself is
@@ -119,10 +121,12 @@ checksum makes a link a chat client clipped fail loudly rather than decode into 
 truncated answers.
 
 **What local/demo mode still cannot do:** scores stay on the device that made them, so
-players will not see each other on the leaderboard, and "one code, one game" is enforced per
-device rather than globally. Both need a shared backend: connect Supabase (above) and the
-room code works on its own, the board goes global, and the single-use rule is enforced in
-Postgres.
+players will not see each other on the leaderboard, and both per-player limits — one run per
+name, 1000 seats per code — are counted per device rather than globally, because each guest's
+browser only knows about itself. The 15-minute expiry is the exception: it rides inside the
+code, so it holds everywhere. The rest needs a shared backend — connect Supabase (above) and
+the board goes global while `join_room` counts the seats and the clock in Postgres, on the
+server's own time.
 
 ## Security
 

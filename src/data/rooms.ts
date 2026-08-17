@@ -2,10 +2,12 @@
 // (single-device, for testing before Supabase is configured). Either way a game requires
 // an active room created by the admin.
 //
-// A room code is SINGLE USE: one code buys exactly one game. Once a run finishes the
-// room is marked `done` and the code stops working, and a name that already raced in
-// the room cannot join it a second time. Hosts hand out a fresh code per round, which
-// is what stops anyone from re-running the same questions to farm the leaderboard.
+// A room code is a session, not a ticket: it opens for 15 minutes and seats up to
+// ROOM_CAPACITY players, one run each. It ends when the clock runs out or the seats
+// run out — never because somebody finished, since the point of a code is that a
+// crowd can race the same questions at once. A name that already raced in the room
+// cannot join it again, which is what stops anyone from re-running the questions to
+// farm the leaderboard. Hosts create a fresh code for the next round.
 import { isSecureMode } from "./supabase";
 import { getActiveRoom, joinRoom, createRoom, type AdminQuestion } from "./backend";
 import { DEFAULT_QUESTIONS, type Question } from "../game/quiz";
@@ -32,15 +34,12 @@ import {
 export const LOCAL_ADMIN_PASSCODE =
   (import.meta.env.VITE_ADMIN_PASSCODE as string | undefined) || "000000";
 
-// v2 adds single-use bookkeeping (status + players); v1 rooms are intentionally dropped.
+// v2 adds the player roster; v1 rooms are intentionally dropped.
 const LS_ROOM = "ggp_room_v2";
-
-export type RoomStatus = "open" | "done";
 
 export interface LocalRoom {
   code: string;
   questions: Question[];
-  status: RoomStatus;
   players: string[]; // names that have already raced here
   createdAt: number;
   /**
@@ -56,10 +55,13 @@ export interface LocalRoom {
 /** A code is only good for 15 minutes after the host created it. */
 export const ROOM_TTL_MS = 15 * 60 * 1000;
 
+/** How many players one code seats. */
+export const ROOM_CAPACITY = 1000;
+
 export const ROOM_EXPIRED_MSG =
-  "This code has expired — codes last 15 minutes. Ask the host for a new one.";
-export const ROOM_USED_MSG =
-  "This code has already been played. Ask the host for a new one.";
+  "This quiz has ended — a code runs for 15 minutes. Ask the host to create a new code.";
+export const ROOM_FULL_MSG =
+  `This room is full — a code seats ${ROOM_CAPACITY} players. Ask the host to create a new code.`;
 export const ROOM_REPLAY_MSG =
   "You already raced with this code. Ask the host for a new one.";
 export const NO_ROOM_MSG = "No active room. Ask the host to open one.";
@@ -69,7 +71,7 @@ export const BAD_CODE_MSG =
 export const normalizeCode = (c: string): string => (c || "").trim().toUpperCase();
 
 /**
- * The single-use gate, kept pure so it is unit-testable without a DOM/localStorage.
+ * The join gate, kept pure so it is unit-testable without a DOM/localStorage.
  * Returns an error message, or null when the join is allowed.
  */
 export function roomJoinError(
@@ -80,12 +82,22 @@ export function roomJoinError(
 ): string | null {
   if (!room) return NO_ROOM_MSG;
   if (room.code !== normalizeCode(code)) return BAD_CODE_MSG;
-  if (room.status === "done") return ROOM_USED_MSG;
+  // Expiry first: a full room that is also over should read as over, since a new
+  // code is the answer either way and the clock is the rule hosts know about.
   if (expiresAt(room) <= now) return ROOM_EXPIRED_MSG;
   const name = username.trim().toLowerCase();
   if (room.players.some((p) => p.trim().toLowerCase() === name)) return ROOM_REPLAY_MSG;
+  if (room.players.length >= ROOM_CAPACITY) return ROOM_FULL_MSG;
   return null;
 }
+
+/** Is this room still taking players? */
+export const isRoomLive = (room: LocalRoom, now = Date.now()): boolean =>
+  timeLeftOn(room, now) > 0 && room.players.length < ROOM_CAPACITY;
+
+/** Seats left on a room, for the host's own count. */
+export const seatsLeft = (room: LocalRoom): number =>
+  Math.max(0, ROOM_CAPACITY - room.players.length);
 
 /**
  * When a room stops working. Read from the code itself, because every device
@@ -106,20 +118,16 @@ export function withPlayer(room: LocalRoom, username: string): LocalRoom {
   return { ...room, players: [...room.players, username] };
 }
 
-/** Retire a room so its code can never start a second game. Pure. */
-export function closedRoom(room: LocalRoom): LocalRoom {
-  return { ...room, status: "done" };
-}
-
 function readLocalRoom(): LocalRoom | null {
   try {
     const raw = JSON.parse(localStorage.getItem(LS_ROOM) || "null") as LocalRoom | null;
     if (!raw || !raw.code) return null;
-    // Tolerate records written by an older build of this same version.
+    // Tolerate records written by an older build of this same version, including the
+    // `status` field from when a finished run retired the code. Dropping it cannot
+    // revive anything: those rooms are long past their 15 minutes.
     return {
       code: raw.code,
       questions: raw.questions ?? [],
-      status: raw.status === "done" ? "done" : "open",
       players: Array.isArray(raw.players) ? raw.players : [],
       createdAt: raw.createdAt ?? 0,
       fromDefaults: raw.fromDefaults === true,
@@ -155,9 +163,9 @@ const toAdmin = (qs: Question[]): AdminQuestion[] =>
 
 /**
  * Adopt a room handed over in an invite link, so a guest's device knows about a
- * room its own admin never created. Idempotent, and it never resurrects a code
- * this device has already played: if a room with the same code is already on
- * file, that record wins, keeping the single-use rule intact across reloads.
+ * room its own admin never created. Idempotent, and it never wipes the roster of
+ * a room this device already knows: if a room with the same code is already on
+ * file, that record wins, so a player who reloads still cannot race twice.
  *
  * Returns the room now active, or null when the key was unusable.
  */
@@ -169,7 +177,6 @@ export function adoptRoom(data: RoomKeyData | null): LocalRoom | null {
   const room: LocalRoom = {
     code,
     questions: data.questions,
-    status: "open",
     players: [],
     createdAt: Date.now(),
   };
@@ -188,7 +195,7 @@ export function adoptRoomFromUrl(search?: string, pathname?: string): LocalRoom 
   return adoptRoom(roomKeyFromLocation(pathname ?? loc?.pathname ?? "", search ?? loc?.search ?? ""));
 }
 
-/** Is there an unplayed room to join right now? */
+/** Is there a room taking players right now? */
 export async function isRoomOpen(): Promise<boolean> {
   if (isSecureMode()) {
     try {
@@ -198,7 +205,7 @@ export async function isRoomOpen(): Promise<boolean> {
     }
   }
   const room = readLocalRoom();
-  return !!room && room.status === "open" && timeLeftOn(room) > 0;
+  return !!room && isRoomLive(room);
 }
 
 /** Join a room by code. Secure: returns run handle. Local: returns the room's questions. */
@@ -248,18 +255,6 @@ export function inviteLinkLocal(origin: string, code: string): string | null {
   return inviteLink(origin, { code: room.code, questions: room.questions });
 }
 
-/**
- * Called when a run ends: burns the code so the same room can't host a second game.
- * Accepts whatever the player joined with — a short code, an invite link, or a room
- * key — because a guest who joined by link would otherwise leave the room unburned.
- */
-export function closeRoomLocal(code: string): void {
-  const room = readLocalRoom();
-  const wanted = normalizeCode(roomKeyFromInput(code)?.code ?? code);
-  if (!room || room.code !== wanted) return;
-  writeLocalRoom(closedRoom(room));
-}
-
 // --- Admin (local/demo) ---
 export function localAdminUnlock(passcode: string): AdminQuestion[] {
   if (passcode !== LOCAL_ADMIN_PASSCODE) throw new Error("Wrong passcode.");
@@ -277,7 +272,6 @@ export function createRoomLocal(passcode: string, questions: AdminQuestion[]): {
   writeLocalRoom({
     code,
     questions: qs,
-    status: "open",
     players: [],
     createdAt: Date.now(),
     fromDefaults: isDefaultSet(qs),

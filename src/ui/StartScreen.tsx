@@ -5,16 +5,17 @@ import { isSecureMode } from "../data/supabase";
 import {
   activeRoomLocal,
   adoptRoomFromUrl,
+  isRoomLive,
   isRoomOpen,
   isTypableCode,
+  ROOM_CAPACITY,
   shareCodeLocal,
-  timeLeftOn,
 } from "../data/rooms";
 
 /** The code for a room already open on this device, if it is short enough to show. */
 function hostCode(): string | null {
   const room = activeRoomLocal();
-  if (!room || room.status !== "open" || timeLeftOn(room) <= 0) return null;
+  if (!room || !isRoomLive(room)) return null;
   const share = shareCodeLocal(room.code);
   return share && isTypableCode(share) ? share : room.code;
 }
@@ -35,9 +36,9 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
   // but showing it as an invitation would only hand the guest an error on submit.
   const [invited] = useState(() => {
     const room = adoptRoomFromUrl();
-    // Spent or expired rooms still adopt — that is how both rules survive a
-    // reload — but neither is an invitation worth showing.
-    return room && room.status === "open" && timeLeftOn(room) > 0 ? room : null;
+    // An ended room still adopts — that is how the one-run-per-player rule
+    // survives a reload — but it is not an invitation worth showing.
+    return room && isRoomLive(room) ? room : null;
   });
   const [code, setCode] = useState(
     () =>
@@ -50,6 +51,10 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
       "",
   );
   const [roomOpen, setRoomOpen] = useState<boolean | null>(null);
+  // The form starts folded behind one button, so the landing page asks for one
+  // decision instead of two empty fields. It opens itself whenever there is
+  // already something to act on: a code we filled in, or an error to explain.
+  const [joining, setJoining] = useState(() => code !== "" || !!error);
   const secure = isSecureMode();
 
   useEffect(() => {
@@ -59,6 +64,12 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
       alive = false;
     };
   }, []);
+
+  // A rejected join arrives as a prop after the fact; never leave the reason
+  // showing above a form the player can no longer see.
+  useEffect(() => {
+    if (error) setJoining(true);
+  }, [error]);
 
   const valid = isValidUsername(name) && code.trim().length >= 4;
 
@@ -85,7 +96,8 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
       </p>
       <p className="mt-2 text-white/40 text-sm">
         You get 10 minutes and 2 hints. Speed, accuracy and correct answers all count toward your
-        score. A code lasts 15 minutes and is good for one run.
+        score. A room code stays open 15 minutes and seats up to {ROOM_CAPACITY} racers, one run
+        each.
       </p>
 
       <div className="mt-5 rounded-3xl overflow-hidden border border-white/10 aspect-[16/7]">
@@ -119,10 +131,19 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
             Join race 🏁
           </button>
         </div>
-      ) : (
-        // Always here, on every device. Hiding the form when this browser had no
+      ) : !joining ? (
+        // One button, on every device. Hiding the way in when this browser had no
         // room of its own was the whole reason a guest saw a dead end instead of
         // somewhere to type the code they were given.
+        <div className="mt-5">
+          <button className="btn-arcade w-full sm:w-auto" onClick={() => setJoining(true)}>
+            Join quiz 🏁
+          </button>
+          <p className="mt-3 text-xs text-white/30">
+            You'll need a username and the room code from your host.
+          </p>
+        </div>
+      ) : (
         <div className="mt-5 space-y-3">
           <p className="font-display font-bold text-sm text-white/50 uppercase tracking-wide">
             Join a game
@@ -172,6 +193,28 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
           🏆 View leaderboard
         </button>
       </div>
+
+      {/* Bottom padding clears the fixed admin button in the corner. */}
+      <footer className="mt-10 pb-16 text-center text-xs text-white/35">
+        Built by{" "}
+        <a
+          className="text-white/60 hover:text-teal hover:underline"
+          href="https://x.com/0xyuura"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Yuura
+        </a>{" "}
+        &amp;{" "}
+        <a
+          className="text-white/60 hover:text-teal hover:underline"
+          href="https://x.com/Bas_Basterx"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Baster
+        </a>
+      </footer>
     </div>
   );
 }

@@ -15,7 +15,7 @@ import {
 } from "./typing";
 import { sanitizeUsername, avatarSeed } from "./username";
 import { isSecureMode } from "../data/supabase";
-import { joinRoomLocal, closeRoomLocal } from "../data/rooms";
+import { joinRoomLocal } from "../data/rooms";
 import { selectAdapter, currentHourBucket, type Entry } from "../data/leaderboard";
 import type { FxEvent } from "../race/RaceCanvas";
 import type { Mood } from "../race/race";
@@ -136,13 +136,9 @@ export function useGame() {
     finished.current = true;
     clearTimers();
 
-    // The code is spent the moment a run ends — one code hosts exactly one game.
-    try {
-      closeRoomLocal(roomCode.current);
-    } catch {
-      /* ignore */
-    }
-
+    // Finishing does not close the room. The code belongs to the session, not to
+    // this player: everyone else it was handed to still has to be able to race.
+    // It ends on its own 15-minute clock, or when the seats run out.
     const s = stateRef.current;
     const remMs = remaining();
     const avgWpm = totalsWpm(s.typeTotals);

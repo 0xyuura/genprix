@@ -8,6 +8,8 @@ import {
   inviteLinkLocal,
   isTypableCode,
   localAdminUnlock,
+  ROOM_CAPACITY,
+  seatsLeft,
   shareCodeLocal,
   timeLeftOn,
 } from "../data/rooms";
@@ -43,13 +45,16 @@ export default function AdminPanel({ onBack }: Props) {
   const edits = secure ? 0 : editedQuestionCount(questions);
 
   // A code dies 15 minutes after it is created, so the host needs to see the
-  // clock they are handing out, not just the code.
+  // clock they are handing out, not just the code — plus how many seats are left.
   const [left, setLeft] = useState(0);
+  const [seats, setSeats] = useState(ROOM_CAPACITY);
   useEffect(() => {
     if (!code) return;
     const tick = () => {
       const room = activeRoomLocal();
-      setLeft(room && room.code === code ? timeLeftOn(room) : 0);
+      const mine = room && room.code === code ? room : null;
+      setLeft(mine ? timeLeftOn(mine) : 0);
+      setSeats(mine ? seatsLeft(mine) : ROOM_CAPACITY);
     };
     tick();
     const t = setInterval(tick, 1000);
@@ -159,8 +164,9 @@ export default function AdminPanel({ onBack }: Props) {
       )}
       <p className="text-xs text-white/40 mb-4">
         Edit the 10 questions, then create a room. Players retype each question before they answer
-        it. A code covers one game and expires when that run ends, so create a new room for every
-        round. The leaderboard resets on the hour.
+        it. A code stays open 15 minutes and seats up to {ROOM_CAPACITY} players, one run each —
+        once the 15 minutes are up the quiz is over and you create a new room. The leaderboard
+        resets on the hour.
       </p>
 
       {code && (
@@ -205,11 +211,14 @@ export default function AdminPanel({ onBack }: Props) {
           <p className="mt-3 text-xs text-amber">
             {left > 0 ? (
               <>
-                Expires in <span className="font-display font-bold">{fmtLeft(left)}</span> · single
-                use per player. Create a new room for the next round.
+                Expires in <span className="font-display font-bold">{fmtLeft(left)}</span> ·{" "}
+                {seats} of {ROOM_CAPACITY} seats left, one run per player.
               </>
             ) : (
-              <>This code has expired. Create a new room to keep playing.</>
+              <>
+                <span className="font-display font-bold">Quiz ended.</span> The 15 minutes are up
+                and this code no longer works — create a new room for the next round.
+              </>
             )}
           </p>
         </div>
