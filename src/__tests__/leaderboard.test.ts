@@ -3,20 +3,20 @@ import {
   sortEntries,
   beats,
   LocalAdapter,
-  currentHourBucket,
-  msUntilNextHour,
-  HOUR_MS,
+  currentBucket,
+  msUntilNextReset,
+  RESET_MS,
   type Entry,
 } from "../data/leaderboard";
 import { runScore, SESSION_MS } from "../game/scoring";
 
-const e = (u: string, score: number, totalMs: number, bucket = currentHourBucket()): Entry => ({
+const e = (u: string, score: number, totalMs: number, bucket = currentBucket()): Entry => ({
   username: u,
   avatarSeed: u,
   score,
   correct: 5,
   totalMs,
-  hourBucket: bucket,
+  bucket,
   createdAt: 0,
 });
 
@@ -60,7 +60,7 @@ describe("board order for real runs", () => {
     score: runScore(correct, msLeft, w, acc),
     correct,
     totalMs: SESSION_MS - msLeft,
-    hourBucket: currentHourBucket(),
+    bucket: currentBucket(),
     createdAt: 0,
     wpm: w,
     accuracy: acc,
@@ -85,19 +85,19 @@ describe("board order for real runs", () => {
   });
 });
 
-describe("hour bucket helpers", () => {
-  it("currentHourBucket is a stable integer for the current hour", () => {
-    expect(currentHourBucket()).toBe(Math.floor(Date.now() / HOUR_MS));
+describe("window helpers", () => {
+  it("currentBucket is a stable integer for the current window", () => {
+    expect(currentBucket()).toBe(Math.floor(Date.now() / RESET_MS));
   });
-  it("msUntilNextHour is within (0, HOUR_MS]", () => {
-    const ms = msUntilNextHour();
+  it("msUntilNextReset is within (0, RESET_MS]", () => {
+    const ms = msUntilNextReset();
     expect(ms).toBeGreaterThan(0);
-    expect(ms).toBeLessThanOrEqual(HOUR_MS);
+    expect(ms).toBeLessThanOrEqual(RESET_MS);
   });
 });
 
 describe("LocalAdapter", () => {
-  it("submits and returns top entries for the current hour, sorted", async () => {
+  it("submits and returns top entries for the current window, sorted", async () => {
     const a = new LocalAdapter();
     await a.submit(e("slow", 200, 9000));
     await a.submit(e("fast", 200, 4000));
@@ -105,10 +105,10 @@ describe("LocalAdapter", () => {
     const top = await a.top(10);
     expect(top.map((x) => x.username)).toEqual(["fast", "slow", "low"]);
   });
-  it("hides entries from a previous hour (auto-reset)", async () => {
+  it("hides entries from a previous window (auto-reset)", async () => {
     const a = new LocalAdapter();
     await a.submit(e("thisHour", 500, 1000));
-    await a.submit(e("lastHour", 999, 1000, currentHourBucket() - 1));
+    await a.submit(e("lastHour", 999, 1000, currentBucket() - 1));
     const top = await a.top(10);
     expect(top.map((x) => x.username)).toEqual(["thisHour"]);
   });
@@ -116,6 +116,41 @@ describe("LocalAdapter", () => {
     const a = new LocalAdapter();
     for (let i = 0; i < 5; i++) await a.submit(e("u" + i, i * 10, 1000));
     expect(await a.top(3)).toHaveLength(3);
+  });
+});
+
+// Joining is what puts you on the board, so the board carries people who are
+// still racing. They must be visible without being treated as results.
+describe("racers who have joined but not finished", () => {
+  it("keeps a player still on track behind a finisher on the same score", () => {
+    const racing = { ...e("racing", 200, 0), finished: false };
+    const done = { ...e("done", 200, 9000), finished: true };
+    expect(sortEntries([racing, done]).map((x) => x.username)).toEqual(["done", "racing"]);
+  });
+
+  it("does not let a zero finishing time steal a rank", () => {
+    expect(beats(200, 5000, { ...e("racing", 200, 0), finished: false })).toBe(false);
+    expect(beats(200, 5000, { ...e("faster", 200, 1000), finished: true })).toBe(true);
+  });
+
+  it("replaces a joiner's row when they finish instead of listing them twice", async () => {
+    const a = new LocalAdapter();
+    const runId = "run-1";
+    await a.submit({ ...e("yuura", 0, 0), runId, correct: 0, finished: false });
+    await a.submit({ ...e("yuura", 7400, 240000), runId, correct: 7, finished: true });
+    const board = await a.top(10);
+    expect(board).toHaveLength(1);
+    expect(board[0].score).toBe(7400);
+    expect(board[0].finished).toBe(true);
+  });
+
+  it("shows everyone who joined, whether or not they have a result", async () => {
+    const a = new LocalAdapter();
+    await a.submit({ ...e("waiting", 0, 0), runId: "r1", correct: 0, finished: false });
+    await a.submit({ ...e("halfway", 3000, 0), runId: "r2", correct: 3, finished: false });
+    await a.submit({ ...e("finisher", 9000, 120000), runId: "r3", correct: 9, finished: true });
+    const board = await a.top(10);
+    expect(board.map((x) => x.username)).toEqual(["finisher", "halfway", "waiting"]);
   });
 });
 
@@ -157,9 +192,9 @@ describe("LocalAdapter.rankFor", () => {
     expect(await a.rankFor(9999, 1000)).toBe(1);
     expect(await a.rankFor(1, 60000)).toBe(3);
   });
-  it("ignores runs from a previous hour", async () => {
+  it("ignores runs from a previous window", async () => {
     const a = new LocalAdapter();
-    await a.submit(e("lastHour", 9999, 1000, currentHourBucket() - 1));
+    await a.submit(e("lastHour", 9999, 1000, currentBucket() - 1));
     expect(await a.rankFor(100, 5000)).toBe(1);
   });
 });

@@ -1,16 +1,27 @@
-// Leaderboard adapters. The board is GLOBAL and auto-resets every clock hour:
-// each score is tagged with an hour bucket (floor(epoch_ms / 3_600_000)) and the
-// board only shows the current bucket, so it wipes on its own at the top of each hour.
-// Secure mode writes scores only via the finish_run RPC; LocalAdapter (demo) uses
-// localStorage.
+// Leaderboard adapters. The board is GLOBAL and clears itself on a fixed
+// schedule: every score is tagged with a window (floor(epoch_ms / RESET_MS)) and
+// the board only shows the current one, so it wipes on its own without a cron job
+// or an admin remembering to press anything.
+//
+// A window is two hours. It used to be one, which was too short for a community
+// session: hosts open a code, wait for people to turn up, run the quiz — and the
+// board rolled over while the last players were still typing, splitting one event
+// across two boards.
+//
+// Every player who JOINS gets a row, not only those who finish. Secure mode
+// writes that row in join_room and updates it as answers land and again at
+// finish; LocalAdapter (demo) keeps the same shape in localStorage, matching rows
+// by runId so a joiner's placeholder is replaced rather than duplicated.
 import { supabase, isSecureMode } from "./supabase";
 
-export const HOUR_MS = 3_600_000;
-export function currentHourBucket(): number {
-  return Math.floor(Date.now() / HOUR_MS);
+/** How long one leaderboard window lasts. */
+export const RESET_MS = 2 * 3_600_000;
+
+export function currentBucket(): number {
+  return Math.floor(Date.now() / RESET_MS);
 }
-export function msUntilNextHour(): number {
-  return HOUR_MS - (Date.now() % HOUR_MS);
+export function msUntilNextReset(): number {
+  return RESET_MS - (Date.now() % RESET_MS);
 }
 
 export interface Entry {
@@ -19,22 +30,34 @@ export interface Entry {
   score: number;
   correct: number;
   totalMs: number;
-  hourBucket: number;
+  bucket: number;
   createdAt: number;
   /** Typing stats for the run. Optional: rows written before the typing race shipped lack them. */
   wpm?: number;
   accuracy?: number; // 0..1
+  /**
+   * False while the player is still racing. Undefined on rows written before
+   * joining put you on the board, which were finished runs by definition.
+   */
+  finished?: boolean;
+  /** Identifies the run so its row can be updated in place instead of duplicated. */
+  runId?: string;
+}
+
+export interface LobbyLike {
+  username: string;
+  avatarSeed: string;
 }
 
 export interface LeaderboardAdapter {
   top(n: number): Promise<Entry[]>;
-  /** Local-only: secure mode writes via finish_run and ignores this. */
+  /** Local-only: secure mode writes via the run RPCs and ignores this. */
   submit(entry: Entry): Promise<void>;
   /**
-   * Placement of a finished run inside the current hour. Kept off `top()` on
+   * Placement of a finished run inside the current window. Kept off `top()` on
    * purpose: ranking used to pull the whole board down to the client, which is
    * fine for one player and 1000x wasteful when a whole community finishes in
-   * the same hour.
+   * the same window.
    */
   rankFor(score: number, totalMs: number): Promise<number>;
 }
@@ -47,17 +70,25 @@ export interface LeaderboardAdapter {
 
 /** A run beats another if it scored higher, or matched the score and got there faster. */
 export function beats(score: number, totalMs: number, e: Entry): boolean {
-  return e.score > score || (e.score === score && e.totalMs < totalMs);
+  // A run still in progress has no finishing time yet, so it cannot win a tie on
+  // one: its total_ms is zero, and without this guard every racer sitting in the
+  // room would outrank the player who actually crossed the line.
+  return e.score > score || (e.score === score && e.finished !== false && e.totalMs < totalMs);
 }
 
 export function sortEntries(entries: Entry[]): Entry[] {
   return [...entries].sort(
-    (a, b) => b.score - a.score || b.correct - a.correct || a.totalMs - b.totalMs,
+    (a, b) =>
+      b.score - a.score ||
+      b.correct - a.correct ||
+      Number(a.finished === false) - Number(b.finished === false) ||
+      a.totalMs - b.totalMs,
   );
 }
 
-// Bumped with the v5 scoring scale so an hour's board never mixes point scales.
-const LS_KEY = "ggp_scores_v3";
+// v4: entries carry a run id and a finished flag, and the window is two hours,
+// so the old key's rows would land in a bucket that no longer means anything.
+const LS_KEY = "ggp_scores_v4";
 
 export class LocalAdapter implements LeaderboardAdapter {
   private read(): Entry[] {
@@ -69,21 +100,24 @@ export class LocalAdapter implements LeaderboardAdapter {
   }
   async submit(entry: Entry): Promise<void> {
     const all = this.read();
-    all.push(entry);
-    // prune anything older than the current hour so storage stays small
-    const bucket = currentHourBucket();
-    const kept = all.filter((e) => e.hourBucket >= bucket - 1);
-    localStorage.setItem(LS_KEY, JSON.stringify(kept));
+    // One row per run. A player appears the moment they join and that same row
+    // is rewritten when they finish, so nobody is listed twice.
+    const at = entry.runId ? all.findIndex((e) => e.runId === entry.runId) : -1;
+    if (at >= 0) all[at] = entry;
+    else all.push(entry);
+    // prune anything older than the current window so storage stays small
+    const bucket = currentBucket();
+    localStorage.setItem(LS_KEY, JSON.stringify(all.filter((e) => e.bucket >= bucket - 1)));
   }
   async top(n: number): Promise<Entry[]> {
-    const bucket = currentHourBucket();
-    return sortEntries(this.read().filter((e) => e.hourBucket === bucket)).slice(0, n);
+    const bucket = currentBucket();
+    return sortEntries(this.read().filter((e) => e.bucket === bucket)).slice(0, n);
   }
   async rankFor(score: number, totalMs: number): Promise<number> {
-    const bucket = currentHourBucket();
+    const bucket = currentBucket();
     let ahead = 0;
     for (const e of this.read()) {
-      if (e.hourBucket === bucket && beats(score, totalMs, e)) ahead++;
+      if (e.bucket === bucket && beats(score, totalMs, e)) ahead++;
     }
     return ahead + 1;
   }
@@ -91,37 +125,43 @@ export class LocalAdapter implements LeaderboardAdapter {
 
 export class SupabaseAdapter implements LeaderboardAdapter {
   async top(n: number): Promise<Entry[]> {
-    const bucket = currentHourBucket();
+    const bucket = currentBucket();
     const { data, error } = await supabase!
-      .from("scores_public")
-      .select("username, avatar_seed, score, correct, total_ms, hour_bucket, created_at")
+      .from("leaderboard_public")
+      .select(
+        "run_id, username, avatar_seed, score, correct, total_ms, finished, hour_bucket, created_at",
+      )
       .eq("hour_bucket", bucket)
       .order("score", { ascending: false })
+      .order("correct", { ascending: false })
+      .order("finished", { ascending: false })
       .order("total_ms", { ascending: true })
       .limit(n);
     if (error) throw new Error(error.message);
     return (data as Array<Record<string, unknown>>).map((r) => ({
+      runId: r.run_id as string,
       username: r.username as string,
       avatarSeed: r.avatar_seed as string,
       score: r.score as number,
       correct: r.correct as number,
       totalMs: r.total_ms as number,
-      hourBucket: r.hour_bucket as number,
+      finished: r.finished as boolean,
+      bucket: r.hour_bucket as number,
       createdAt: new Date(r.created_at as string).getTime(),
     }));
   }
   async submit(): Promise<void> {
-    // no-op: secure-mode scores are written server-side by finish_run.
+    // no-op: secure-mode rows are written server-side by join_room / finish_run.
   }
   async rankFor(score: number, totalMs: number): Promise<number> {
     // head+count: Postgres answers with a number, not the board. One finisher
-    // costs one counted index scan instead of a full-bucket download.
-    const bucket = currentHourBucket();
+    // costs one counted index scan instead of a full-window download.
+    const bucket = currentBucket();
     const { count, error } = await supabase!
-      .from("scores_public")
+      .from("leaderboard_public")
       .select("score", { count: "exact", head: true })
       .eq("hour_bucket", bucket)
-      .or(`score.gt.${score},and(score.eq.${score},total_ms.lt.${totalMs})`);
+      .or(`score.gt.${score},and(score.eq.${score},finished.is.true,total_ms.lt.${totalMs})`);
     if (error) throw new Error(error.message);
     return (count ?? 0) + 1;
   }

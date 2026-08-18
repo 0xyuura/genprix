@@ -24,7 +24,8 @@ const NOTES = [
   "Track limits: a wrong character parks the kart until you backspace it",
   "Pit note: a hint shows the first and last letter of the answer",
   "Ranking: correct answers first, then the clock, then how cleanly you typed",
-  "Leaderboard: resets at the top of every hour",
+  "Start procedure: you wait on the grid until the host sets the whole room off",
+  "Leaderboard: every name that joins is on it, and it clears every two hours",
 ];
 
 interface Props {
@@ -160,7 +161,8 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
             Join quiz
           </button>
           <p className="mt-3 text-xs text-white/35">
-            Bring a name and the room code your host read out.
+            Bring a name and the room code your host read out. You'll wait on the grid with
+            everyone else until they start the room.
           </p>
         </div>
       ) : (

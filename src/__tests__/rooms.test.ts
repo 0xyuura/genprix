@@ -1,21 +1,27 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   BAD_CODE_MSG,
+  LOCAL_ADMIN_PASSCODE,
   NO_ROOM_MSG,
   ROOM_CAPACITY,
   ROOM_FULL_MSG,
   ROOM_REPLAY_MSG,
   adoptRoom,
   adoptRoomFromUrl,
+  createRoomLocal,
   inviteLinkLocal,
   isRoomLive,
   joinRoomLocal,
+  lobbyOfRoom,
   normalizeCode,
   roomJoinError,
+  roomLobbyLocal,
   seatsLeft,
+  startGameLocal,
   withPlayer,
   type LocalRoom,
 } from "../data/rooms";
+import { SESSION_MS } from "../game/scoring";
 import { ROOM_PATH, encodeRoomKey, newRoomCode } from "../data/roomkey";
 import { DEFAULT_QUESTIONS } from "../game/quiz";
 
@@ -148,6 +154,83 @@ describe("a guest joining from an invite link", () => {
     expect(link).toContain(ROOM_PATH);
     expect(link!.length).toBeLessThan(45); // short enough to paste anywhere
     expect(inviteLinkLocal("https://genprix.vercel.app", "NOPE99")).toBeNull();
+  });
+});
+
+// The waiting room. Before this, whoever typed the code fastest simply had more
+// of the ten minutes left than whoever was still finding the link, which is not
+// a race — it is a reward for reading a Discord message early.
+describe("holding the field on the grid", () => {
+  class MemStorage {
+    private m = new Map<string, string>();
+    getItem(k: string) {
+      return this.m.has(k) ? this.m.get(k)! : null;
+    }
+    setItem(k: string, v: string) {
+      this.m.set(k, v);
+    }
+    clear() {
+      this.m.clear();
+    }
+  }
+  beforeEach(() => {
+    (globalThis as unknown as { localStorage: MemStorage }).localStorage = new MemStorage();
+  });
+
+  it("a room the host just opened is waiting, not running", () => {
+    expect(lobbyOfRoom(room({ startedAt: null })).started).toBe(false);
+  });
+
+  it("holds the whole session back until the host starts it", () => {
+    const waiting = room({ startedAt: null });
+    // Five minutes of gathering must not cost the field five minutes of quiz.
+    expect(lobbyOfRoom(waiting, Date.now() + 5 * 60_000).remainingMs).toBe(SESSION_MS);
+  });
+
+  it("runs one clock for everyone once the lights go out", () => {
+    const t0 = Date.now();
+    const live = room({ startedAt: t0 });
+    expect(lobbyOfRoom(live, t0).remainingMs).toBe(SESSION_MS);
+    expect(lobbyOfRoom(live, t0 + 60_000).remainingMs).toBe(SESSION_MS - 60_000);
+    // A latecomer joining here inherits what is left, not a fresh ten minutes.
+    expect(lobbyOfRoom(live, t0 + SESSION_MS + 5_000).remainingMs).toBe(0);
+  });
+
+  it("lists everyone holding the code, in the order they arrived", () => {
+    const { code } = createRoomLocal(LOCAL_ADMIN_PASSCODE, []);
+    expect(roomLobbyLocal(code).started).toBe(false);
+    joinRoomLocal(code, "first");
+    joinRoomLocal(code, "second");
+    const lobby = roomLobbyLocal(code);
+    expect(lobby.players).toEqual(["first", "second"]);
+    expect(lobby.count).toBe(2);
+  });
+
+  it("only the host can drop the lights", () => {
+    const { code } = createRoomLocal(LOCAL_ADMIN_PASSCODE, []);
+    expect(() => startGameLocal("not-the-passcode")).toThrow();
+    expect(roomLobbyLocal(code).started).toBe(false);
+    startGameLocal(LOCAL_ADMIN_PASSCODE);
+    expect(roomLobbyLocal(code).started).toBe(true);
+  });
+
+  it("reports nothing for a code this device has never seen", () => {
+    expect(roomLobbyLocal("ZZZ999")).toEqual({
+      started: false,
+      remainingMs: 0,
+      players: [],
+      count: 0,
+      expiresInMs: 0,
+    });
+  });
+
+  // A guest's browser holds a copy of the room, not the room itself: nothing in
+  // it can ever hear the host press Start. Making them wait for a signal that
+  // cannot arrive would be a locked door, so on that device the race is on.
+  it("does not strand a guest whose device has no channel back to the host", () => {
+    const adopted = adoptRoom({ code: "ABC123", questions: [] });
+    expect(adopted!.hosted).toBe(false);
+    expect(lobbyOfRoom(adopted!).started).toBe(true);
   });
 });
 

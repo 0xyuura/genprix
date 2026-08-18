@@ -133,6 +133,34 @@ body {
 .lamp-4 { animation: light-seq 3.6s infinite 0.54s; }
 .lamp-5 { animation: light-seq 3.6s infinite 0.72s; }
 
+/* Held on the grid: the reds are on and they stay on, breathing very slightly so
+   the screen reads as live rather than frozen. They do not go out here — the host
+   going green replaces this screen with the race. */
+@keyframes lights-hold {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 12px rgba(224, 27, 46, 0.75);
+  }
+  50% {
+    opacity: 0.72;
+    box-shadow: 0 0 4px rgba(224, 27, 46, 0.4);
+  }
+}
+.lights-hold { animation: lights-hold 1.8s ease-in-out infinite; }
+
+/* Three dots that fill in one at a time after "Waiting for the host". Written in
+   CSS so the text itself never reflows and the line cannot jump. */
+@keyframes dots {
+  0%   { content: ""; }
+  25%  { content: "."; }
+  50%  { content: ".."; }
+  75%, 100% { content: "..."; }
+}
+.dots::after {
+  content: "...";
+  animation: dots 1.6s steps(1, end) infinite;
+}
+
 /* Yellow-flag wash across a panel: caution, without turning the text red. */
 @keyframes caution {
   0%, 100% { background-position: 0 0; }

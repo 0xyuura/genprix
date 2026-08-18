@@ -10,6 +10,26 @@ export interface StartRunResult {
   // The whole board. The client shows all ten and lets the player take them in
   // any order, so the server hands over the set rather than a cursor.
   questions: PublicQuestion[];
+  // Joining no longer means racing. Players wait in the room until the host
+  // starts it, so the server says whether that has happened and how much of the
+  // session is left — measured on its clock, not on whenever this tab loaded.
+  started: boolean;
+  remaining_ms: number;
+}
+
+export interface LobbyPlayer {
+  username: string;
+  avatar_seed: string;
+}
+
+export interface LobbyResult {
+  started: boolean;
+  remaining_ms: number;
+  /** Everyone holding this code, in the order they arrived. */
+  players: LobbyPlayer[];
+  count: number;
+  /** Milliseconds before the code itself expires and the room can no longer be started. */
+  expires_in_ms: number;
 }
 
 export interface AnswerResult {
@@ -66,6 +86,16 @@ export const answerQuestion = (
 
 export const finishRun = (run_id: string, token: string) =>
   rpc<FinishResult>("finish_run", { p_run_id: run_id, p_token: token });
+
+/** Who is in the room and whether the host has started it. Safe for anyone holding the code. */
+export const roomLobby = (code: string) => rpc<LobbyResult>("room_lobby", { p_code: code });
+
+/** Host only: drop the lights and start everyone's clock at the same instant. */
+export const startGame = (passcode: string, code: string) =>
+  rpc<{ ok: boolean; started_at: string; players: number }>("start_game", {
+    p_passcode: passcode,
+    p_code: code,
+  });
 
 // --- Admin ---
 export const adminGetQuestions = (passcode: string) =>

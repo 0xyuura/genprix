@@ -9,8 +9,17 @@
 // cannot join it again, which is what stops anyone from re-running the questions to
 // farm the leaderboard. Hosts create a fresh code for the next round.
 import { isSecureMode } from "./supabase";
-import { getActiveRoom, joinRoom, createRoom, type AdminQuestion } from "./backend";
+import {
+  getActiveRoom,
+  joinRoom,
+  createRoom,
+  roomLobby,
+  startGame,
+  type AdminQuestion,
+  type LobbyResult,
+} from "./backend";
 import { DEFAULT_QUESTIONS, type Question } from "../game/quiz";
+import { SESSION_MS } from "../game/scoring";
 import {
   changedFromDefaults,
   codeIssuedAt,
@@ -50,6 +59,27 @@ export interface LocalRoom {
    * edited anything.
    */
   fromDefaults?: boolean;
+  /**
+   * When the host dropped the lights. Null while everyone is still waiting in
+   * the room. The session clock runs from here, so a player who joined early
+   * does not lose the minutes they spent waiting.
+   */
+  startedAt?: number | null;
+  /**
+   * This device created the room, so it is the one with a Start button. A guest
+   * device only ever received the code, and has no channel back to the host —
+   * see startedOnArrival().
+   */
+  hosted?: boolean;
+}
+
+/** Everyone waiting in a room, and whether the host has set them off. */
+export interface Lobby {
+  started: boolean;
+  remainingMs: number;
+  players: string[];
+  count: number;
+  expiresInMs: number;
 }
 
 /** A code is only good for 15 minutes after the host created it. */
@@ -113,6 +143,23 @@ export function expiresAt(room: LocalRoom): number {
 export const timeLeftOn = (room: LocalRoom, now = Date.now()): number =>
   Math.max(0, expiresAt(room) - now);
 
+/**
+ * The waiting room as the players see it. Pure, so the rule that "the clock
+ * starts when the host says so, not when you typed the code" is testable.
+ */
+export function lobbyOfRoom(room: LocalRoom, now = Date.now()): Lobby {
+  const startedAt = room.startedAt ?? null;
+  return {
+    started: startedAt !== null,
+    // Everyone's clock runs from the same instant, so someone who joined first
+    // and waited ten minutes for the rest is not punished for turning up early.
+    remainingMs: startedAt === null ? SESSION_MS : Math.max(0, startedAt + SESSION_MS - now),
+    players: room.players,
+    count: room.players.length,
+    expiresInMs: timeLeftOn(room, now),
+  };
+}
+
 /** Record a joining player. Pure — returns the next room record. */
 export function withPlayer(room: LocalRoom, username: string): LocalRoom {
   return { ...room, players: [...room.players, username] };
@@ -131,6 +178,9 @@ function readLocalRoom(): LocalRoom | null {
       players: Array.isArray(raw.players) ? raw.players : [],
       createdAt: raw.createdAt ?? 0,
       fromDefaults: raw.fromDefaults === true,
+      // A room written before the waiting room existed was already under way.
+      startedAt: raw.startedAt === undefined ? raw.createdAt ?? 0 : raw.startedAt,
+      hosted: raw.hosted === true,
     };
   } catch {
     return null;
@@ -179,6 +229,13 @@ export function adoptRoom(data: RoomKeyData | null): LocalRoom | null {
     questions: data.questions,
     players: [],
     createdAt: Date.now(),
+    // A guest device holds a copy of the room, not the room itself: nothing here
+    // can ever hear the host press Start. Making them wait for a signal that
+    // cannot arrive would be a locked door, so on this device the lights are
+    // already out. Secure mode is where a real waiting room lives, because there
+    // the host and the players are looking at the same row in the same table.
+    startedAt: Date.now(),
+    hosted: false,
   };
   writeLocalRoom(room);
   return room;
@@ -275,9 +332,50 @@ export function createRoomLocal(passcode: string, questions: AdminQuestion[]): {
     players: [],
     createdAt: Date.now(),
     fromDefaults: isDefaultSet(qs),
+    startedAt: null, // players gather first; the host drops the lights
+    hosted: true,
   });
   return { code };
 }
+
+/** Host only: start the session for everyone holding this code. */
+export function startGameLocal(passcode: string): number {
+  if (passcode !== LOCAL_ADMIN_PASSCODE) throw new Error("Wrong passcode.");
+  const room = readLocalRoom();
+  if (!room) throw new Error(NO_ROOM_MSG);
+  const startedAt = room.startedAt ?? Date.now();
+  writeLocalRoom({ ...room, startedAt });
+  return startedAt;
+}
+
+export function roomLobbyLocal(code: string): Lobby {
+  const room = readLocalRoom();
+  if (!room || room.code !== normalizeCode(code)) {
+    return { started: false, remainingMs: 0, players: [], count: 0, expiresInMs: 0 };
+  }
+  return lobbyOfRoom(room);
+}
+
+export async function startGameAny(passcode: string, code: string): Promise<void> {
+  if (isSecureMode()) {
+    await startGame(passcode, code);
+    return;
+  }
+  startGameLocal(passcode);
+}
+
+export async function lobbyOf(code: string): Promise<Lobby> {
+  if (isSecureMode()) return fromLobbyResult(await roomLobby(code));
+  return roomLobbyLocal(code);
+}
+
+export const fromLobbyResult = (r: LobbyResult): Lobby => ({
+  started: r.started,
+  remainingMs: r.remaining_ms,
+  players: (r.players ?? []).map((p) => p.username),
+  count: r.count,
+  expiresInMs: r.expires_in_ms,
+});
 
 /** How many questions a link would have to carry. 0 means the shortest link. */
 export function editedQuestionCount(questions: AdminQuestion[]): number {

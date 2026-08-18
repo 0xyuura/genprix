@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { selectAdapter, msUntilNextHour, type Entry } from "../data/leaderboard";
+import { selectAdapter, msUntilNextReset, type Entry } from "../data/leaderboard";
 import { isSecureMode } from "../data/supabase";
 import { ROOM_CAPACITY } from "../data/rooms";
 import Avatar from "./Avatar";
@@ -13,30 +13,40 @@ interface Props {
 function fmt(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(s / 60);
+  // A two-hour window would otherwise count down from "119:59", which reads as
+  // a stopwatch that has gone wrong rather than as time remaining.
+  if (m >= 60) {
+    return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  }
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
 export default function Leaderboard({ onBack, highlightUser }: Props) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [resetIn, setResetIn] = useState(msUntilNextHour());
+  const [resetIn, setResetIn] = useState(msUntilNextReset());
 
   useEffect(() => {
     let alive = true;
-    (async () => {
+    const load = async () => {
       try {
-        // Every player who finished this hour, not a top-25 slice. A code seats
-        // ROOM_CAPACITY racers, so cutting the list at 25 hid everyone else from
-        // a board whose whole point is that the community can read it.
+        // Everyone in this window, not a top-25 slice, and not only finishers: a
+        // code seats ROOM_CAPACITY racers, and a board the community is meant to
+        // read has to show the community. Cutting it at 25 hid everyone else.
         const top = await selectAdapter().top(ROOM_CAPACITY);
         if (alive) setEntries(top);
       } catch {
         if (alive) setError("Couldn't load the scores.");
       }
-    })();
-    const t = setInterval(() => setResetIn(msUntilNextHour()), 1000);
+    };
+    void load();
+    // Names arrive as people join and rows change as they answer, so the board
+    // refreshes itself — a screen at the front of a room nobody is touching.
+    const r = setInterval(load, 5000);
+    const t = setInterval(() => setResetIn(msUntilNextReset()), 1000);
     return () => {
       alive = false;
+      clearInterval(r);
       clearInterval(t);
     };
   }, []);
@@ -83,7 +93,8 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
         </div>
 
         <p className="px-3 py-2.5 text-xs text-white/45 border-b border-line">
-          Ranked by correct answers first, then the time you had left, then how cleanly you typed.
+          Everyone who joins a room is listed here from the moment they join. Ranked by correct
+          answers first, then the time you had left, then how cleanly you typed.
         </p>
 
         {/* Column headers, so the numbers in each row are readable as data. */}
@@ -101,7 +112,7 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
         {error && <p className="px-3 py-4 text-bad text-sm">{error}</p>}
         {!entries && !error && <p className="px-3 py-4 text-white/45 text-sm">Loading scores…</p>}
         {entries && entries.length === 0 && (
-          <p className="px-3 py-4 text-white/45 text-sm">No scores this hour yet.</p>
+          <p className="px-3 py-4 text-white/45 text-sm">Nobody has joined a room this window.</p>
         )}
 
       {/* A full field is a thousand rows, so the list scrolls inside the panel
@@ -110,11 +121,14 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
           {entries?.map((e, i) => {
             const me = highlightUser && e.username === highlightUser;
             const lead = i === 0;
+            // Still out on track: on the board because they joined, but their
+            // run is not a result yet, so it is not dressed up as one.
+            const racing = e.finished === false;
             return (
               <li
-                key={`${e.username}-${i}`}
+                key={e.runId ?? `${e.username}-${i}`}
                 className={`board-row ${me ? "bg-teal/[0.08]" : ""} ${
-                  lead ? "bg-purple/[0.12]" : ""
+                  lead && !racing ? "bg-purple/[0.12]" : ""
                 }`}
               >
                 <span
@@ -136,8 +150,12 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
                 >
                   {e.correct}/10
                 </span>
-                <span className="num text-sm text-white/60 w-14 text-right">
-                  {(e.totalMs / 1000).toFixed(1)}s
+                <span
+                  className={`num text-sm w-14 text-right ${
+                    racing ? "!text-amber !text-[10px] uppercase tracking-wider" : "text-white/60"
+                  }`}
+                >
+                  {racing ? "racing" : `${(e.totalMs / 1000).toFixed(1)}s`}
                 </span>
                 <span className="num text-sm text-white/45 w-10 text-right hidden md:inline">
                   {e.accuracy != null ? `${Math.round(e.accuracy * 100)}%` : "—"}

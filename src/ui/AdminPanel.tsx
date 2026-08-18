@@ -2,18 +2,20 @@ import { useEffect, useState } from "react";
 import { isSecureMode } from "../data/supabase";
 import { adminGetQuestions, type AdminQuestion } from "../data/backend";
 import {
-  activeRoomLocal,
   createRoomAny,
   editedQuestionCount,
   inviteLinkLocal,
   isTypableCode,
   localAdminUnlock,
+  lobbyOf,
   ROOM_CAPACITY,
-  seatsLeft,
   shareCodeLocal,
-  timeLeftOn,
+  startGameAny,
+  type Lobby,
 } from "../data/rooms";
 import { DEFAULT_QUESTIONS } from "../game/quiz";
+import Avatar from "./Avatar";
+import { avatarSeed } from "../game/username";
 
 const fmtLeft = (ms: number): string => {
   const total = Math.ceil(ms / 1000);
@@ -44,22 +46,51 @@ export default function AdminPanel({ onBack }: Props) {
   const secure = isSecureMode();
   const edits = secure ? 0 : editedQuestionCount(questions);
 
-  // A code dies 15 minutes after it is created, so the host needs to see the
-  // clock they are handing out, not just the code — plus how many seats are left.
+  // Once a room is open this is the host's pit wall: who has arrived, how long
+  // the code has left, and the button that sets them all off together.
+  const [lobby, setLobby] = useState<Lobby | null>(null);
   const [left, setLeft] = useState(0);
-  const [seats, setSeats] = useState(ROOM_CAPACITY);
   useEffect(() => {
     if (!code) return;
-    const tick = () => {
-      const room = activeRoomLocal();
-      const mine = room && room.code === code ? room : null;
-      setLeft(mine ? timeLeftOn(mine) : 0);
-      setSeats(mine ? seatsLeft(mine) : ROOM_CAPACITY);
+    let alive = true;
+    const ask = async () => {
+      try {
+        const l = await lobbyOf(code);
+        if (!alive) return;
+        setLobby(l);
+        setLeft(l.expiresInMs);
+      } catch {
+        /* a dropped poll just means the next one shows a fresher number */
+      }
     };
-    tick();
-    const t = setInterval(tick, 1000);
-    return () => clearInterval(t);
+    void ask();
+    const poll = setInterval(ask, 2000);
+    // The clock ticks down between polls so it reads like a clock rather than
+    // jumping two seconds at a time.
+    const tick = setInterval(() => setLeft((v) => Math.max(0, v - 1000)), 1000);
+    return () => {
+      alive = false;
+      clearInterval(poll);
+      clearInterval(tick);
+    };
   }, [code]);
+
+  const seats = Math.max(0, ROOM_CAPACITY - (lobby?.count ?? 0));
+  const waiting = lobby?.players ?? [];
+
+  const start = async () => {
+    if (!code) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await startGameAny(passcode, code);
+      setLobby((l) => (l ? { ...l, started: true } : l));
+    } catch (e) {
+      setMsg((e as Error).message || "Could not start the game.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const unlock = async () => {
     setBusy(true);
@@ -168,9 +199,10 @@ export default function AdminPanel({ onBack }: Props) {
       )}
 
       <p className="text-xs text-white/45 mb-4">
-        Edit the ten questions, then open a room. Players retype each question before they answer
-        it. A code runs 15 minutes and seats {ROOM_CAPACITY} players at one run each; once the time
-        is up the quiz is over and you open a new one. The leaderboard resets on the hour.
+        Edit the ten questions, then open a room. Everyone who types the code waits on the grid
+        until you press Start, and the ten minutes then run for the whole field at once. A code
+        lives 15 minutes and seats {ROOM_CAPACITY} players at one run each; after that you open a
+        new one. The leaderboard clears every two hours.
       </p>
 
       {code && (
@@ -212,6 +244,54 @@ export default function AdminPanel({ onBack }: Props) {
                   Reset to the built-in questions if you want a code short enough to say out loud.
                 </p>
               </>
+            )}
+          </div>
+
+          {/* Nobody races until this button is pressed. The whole field starts on
+              one clock, which is the only way a leaderboard across a thousand
+              players compares like with like. */}
+          <div className="border-t border-line px-4 py-4">
+            {lobby?.started ? (
+              <p className="stencil !text-good text-center">
+                Green flag · the room is racing
+                {waiting.length > 0 && (
+                  <span className="!text-white/45">
+                    {" · "}
+                    <span className="num">{waiting.length}</span> away
+                  </span>
+                )}
+              </p>
+            ) : (
+              <>
+                <button
+                  className="btn-arcade w-full !bg-good !text-black"
+                  onClick={start}
+                  disabled={busy || left <= 0}
+                >
+                  {busy ? "…" : `Start the game${waiting.length ? ` · ${waiting.length}` : ""}`}
+                </button>
+                <p className="mt-2 text-xs text-white/45 text-center">
+                  {left <= 0
+                    ? "This code has expired. Open a new room to start one."
+                    : waiting.length === 0
+                      ? "Hand out the code first. Players wait here until you press this."
+                      : `${waiting.length} ${waiting.length === 1 ? "player is" : "players are"} holding on the grid.`}
+                </p>
+              </>
+            )}
+
+            {waiting.length > 0 && (
+              <ol className="mt-3 max-h-40 overflow-y-auto border border-line divide-y divide-line/60">
+                {waiting.map((p, i) => (
+                  <li key={`${p}-${i}`} className="flex items-center gap-2.5 px-2.5 py-1.5">
+                    <span className="num text-xs text-white/30 w-6 text-center">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <Avatar seed={avatarSeed(p)} name={p} size={22} />
+                    <span className="text-sm text-white/75 truncate">{p}</span>
+                  </li>
+                ))}
+              </ol>
             )}
           </div>
 

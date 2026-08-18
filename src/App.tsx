@@ -8,6 +8,7 @@ import Hud from "./ui/Hud";
 import QuestionBoard from "./ui/QuestionBoard";
 import QuestionPanel from "./ui/QuestionPanel";
 import ResultsScreen from "./ui/ResultsScreen";
+import LobbyScreen from "./ui/LobbyScreen";
 import Leaderboard from "./ui/Leaderboard";
 import AdminPanel from "./ui/AdminPanel";
 import { Lock } from "./ui/Glyph";
@@ -71,6 +72,10 @@ export default function App() {
         initialName={state.username}
         error={state.notice}
       />
+    );
+  } else if (state.phase === "lobby") {
+    screen = (
+      <LobbyScreen code={state.roomCode} username={state.username} lobby={state.lobby} />
     );
   } else if (state.phase === "results") {
     screen = (

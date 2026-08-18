@@ -21,13 +21,16 @@ import {
 } from "./typing";
 import { sanitizeUsername, avatarSeed } from "./username";
 import { isSecureMode } from "../data/supabase";
-import { joinRoomLocal } from "../data/rooms";
+import { activeRoomLocal, joinRoomLocal, lobbyOf, lobbyOfRoom, type Lobby } from "../data/rooms";
 import { joinRoom, answerQuestion, finishRun } from "../data/backend";
-import { selectAdapter, currentHourBucket, type Entry } from "../data/leaderboard";
+import { selectAdapter, currentBucket, type Entry } from "../data/leaderboard";
 import type { FxEvent } from "../race/RaceCanvas";
 import type { Mood } from "../race/race";
 
-export type Phase = "idle" | "playing" | "results";
+export type Phase = "idle" | "lobby" | "playing" | "results";
+
+/** How often a waiting player asks the room whether the host has started it. */
+const LOBBY_POLL_MS = 2000;
 
 /** Each question is played in two typed stages: retype the prompt, then type the answer. */
 export type Stage = "prompt" | "answer";
@@ -67,6 +70,10 @@ export interface GameState {
   rank: number | null;
   totalMs: number;
   secure: boolean;
+  /** The room code this player joined with, so the waiting room can show it. */
+  roomCode: string;
+  /** Who else is waiting, refreshed while the phase is "lobby". */
+  lobby: Lobby | null;
   typeTotals: TypingTotals; // session typing accumulator (completed passages only)
   wpm: number; // session average, refreshed as each passage completes
   accuracy: number; // 0..1
@@ -95,6 +102,8 @@ const initial: GameState = {
   rank: null,
   totalMs: 0,
   secure: false,
+  roomCode: "",
+  lobby: null,
   typeTotals: emptyTotals,
   wpm: 0,
   accuracy: 1,
@@ -122,6 +131,9 @@ export function useGame() {
   // finish are graded there, so these two are what make the score real.
   const runId = useRef<string | null>(null);
   const runToken = useRef<string | null>(null);
+  // Local mode only: the id that ties the row written when this player joined to
+  // the one rewritten when they finish, so they appear once and not twice.
+  const localRunId = useRef<string>("");
   const endsAt = useRef(0);
   const fxId = useRef(0);
   const moodTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -200,15 +212,19 @@ export function useGame() {
     try {
       const adapter = selectAdapter();
       const entry: Entry = {
+        // Same id as the row written on join, so finishing updates that row
+        // instead of listing this player a second time.
+        runId: localRunId.current || undefined,
         username: s.username,
         avatarSeed: s.avatarSeed,
         score,
         correct: s.solvedCount,
         totalMs,
-        hourBucket: currentHourBucket(),
+        bucket: currentBucket(),
         createdAt: Date.now(),
         wpm: Math.round(avgWpm),
         accuracy: acc,
+        finished: true,
       };
       void adapter.submit(entry).then(async () => {
         try {
@@ -235,8 +251,20 @@ export function useGame() {
     }));
   }, []);
 
-  // Join the room by code and open a fresh 10-minute session. The code is burned on
-  // finish, and a name that already raced here is refused.
+  /**
+   * Drop the lights. Called either straight from join (a room already under way)
+   * or by the lobby poll the moment the host starts it. The remaining time comes
+   * from whoever owns the clock — the server in secure mode — so every player's
+   * countdown reads the same, however long they sat in the waiting room.
+   */
+  const beginRun = useCallback((remainingMs: number) => {
+    endsAt.current = performance.now() + remainingMs;
+    setState((s) => (s.phase === "lobby" ? { ...s, phase: "playing", remainingMs } : s));
+  }, []);
+
+  // Join the room by code. Joining puts you in the waiting room and on the
+  // leaderboard; the race itself starts when the host starts it. A name that
+  // already raced in this room is refused.
   const join = useCallback(async (rawName: string, code: string) => {
     const username = sanitizeUsername(rawName);
     const seed = avatarSeed(username);
@@ -249,6 +277,7 @@ export function useGame() {
     // code. Local mode keeps the self-contained code, where the room travels
     // inside the code itself.
     let qs: Question[];
+    let lobby: Lobby;
     try {
       if (secure) {
         const started = await joinRoom(code, username, seed);
@@ -262,10 +291,23 @@ export function useGame() {
           accepted: [],
           hint: q.hint ?? undefined,
         }));
+        // One round-trip for the roster, so the waiting room is populated on the
+        // first paint instead of blank until the first poll.
+        lobby = await lobbyOf(code).catch(() => ({
+          started: started.started,
+          remainingMs: started.remaining_ms,
+          players: [username],
+          count: 1,
+          expiresInMs: 0,
+        }));
       } else {
         runId.current = null;
         runToken.current = null;
         qs = joinRoomLocal(code, username); // throws if no room / wrong code / already used
+        const room = activeRoomLocal();
+        lobby = room
+          ? lobbyOfRoom(room)
+          : { started: true, remainingMs: SESSION_MS, players: [username], count: 1, expiresInMs: 0 };
       }
     } catch (e) {
       setState((st) => ({
@@ -276,16 +318,42 @@ export function useGame() {
       return;
     }
     localQs.current = qs;
-    roomCode.current = code;
-    endsAt.current = performance.now() + SESSION_MS;
+    // A guest may have pasted a link or a room key rather than the code itself;
+    // the room on file is the one the lobby has to be asked about.
+    roomCode.current = secure ? code : (activeRoomLocal()?.code ?? code);
+    endsAt.current = performance.now() + lobby.remainingMs;
+
+    // Joining is what puts a name on the board, so the room roster and the
+    // leaderboard agree from the first second. Secure mode writes that row
+    // inside join_room; local mode has to write its own.
+    if (!secure) {
+      localRunId.current = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      void selectAdapter()
+        .submit({
+          runId: localRunId.current,
+          username,
+          avatarSeed: seed,
+          score: 0,
+          correct: 0,
+          totalMs: 0,
+          bucket: currentBucket(),
+          createdAt: Date.now(),
+          finished: false,
+        })
+        .catch(() => {
+          /* a full localStorage must not block the race */
+        });
+    }
 
     setState({
       ...initial,
-      phase: "playing",
+      phase: lobby.started ? "playing" : "lobby",
       username,
       avatarSeed: seed,
       secure,
-      remainingMs: SESSION_MS,
+      roomCode: roomCode.current,
+      lobby,
+      remainingMs: lobby.remainingMs,
       board: qs.map((q) => ({
         id: q.id,
         prompt: q.prompt,
@@ -442,7 +510,7 @@ export function useGame() {
     setState({
       ...initial,
       username: name,
-      notice: "That code is used up. Ask the host for a fresh one to race again.",
+      notice: "One run per name per code. Ask the host for a new one to race again.",
     });
   }, []);
 
@@ -462,6 +530,31 @@ export function useGame() {
     }, 250);
     return () => clearInterval(id);
   }, [state.phase, finish]);
+
+  // The waiting room. Everyone holding the code asks the same question — "has the
+  // host started?" — until the answer is yes, and then every one of them starts
+  // on the server's clock rather than on whenever their own poll happened to land.
+  useEffect(() => {
+    if (state.phase !== "lobby") return;
+    let alive = true;
+    const ask = async () => {
+      let lobby: Lobby;
+      try {
+        lobby = await lobbyOf(roomCode.current);
+      } catch {
+        return; // a dropped poll is not worth showing anyone; the next one retries
+      }
+      if (!alive) return;
+      setState((s) => (s.phase === "lobby" ? { ...s, lobby } : s));
+      if (lobby.started) beginRun(lobby.remainingMs);
+    };
+    const id = setInterval(ask, LOBBY_POLL_MS);
+    void ask();
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [state.phase, beginRun]);
 
   useEffect(() => clearTimers, []);
 
