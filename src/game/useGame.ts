@@ -21,7 +21,16 @@ import {
 } from "./typing";
 import { sanitizeUsername, avatarSeed } from "./username";
 import { isSecureMode } from "../data/supabase";
-import { activeRoomLocal, joinRoomLocal, lobbyOf, lobbyOfRoom, type Lobby } from "../data/rooms";
+import {
+  activeRoomLocal,
+  isTypableCode,
+  joinRoomLocal,
+  lobbyOf,
+  lobbyOfRoom,
+  normalizeCode,
+  shareCodeLocal,
+  type Lobby,
+} from "../data/rooms";
 import { joinRoom, answerQuestion, finishRun } from "../data/backend";
 import { selectAdapter, currentBucket, type Entry } from "../data/leaderboard";
 import type { FxEvent } from "../race/RaceCanvas";
@@ -321,6 +330,16 @@ export function useGame() {
     // A guest may have pasted a link or a room key rather than the code itself;
     // the room on file is the one the lobby has to be asked about.
     roomCode.current = secure ? code : (activeRoomLocal()?.code ?? code);
+    // What the waiting room shows is not always what it looks the room up by.
+    // Locally the key is a stored 9-character record while the host reads out a
+    // 10-character share code, and a player who typed one and is shown the other
+    // has every reason to think they are in the wrong room.
+    const shownCode = secure
+      ? normalizeCode(code)
+      : (() => {
+          const share = shareCodeLocal(roomCode.current);
+          return share && isTypableCode(share) ? share : roomCode.current;
+        })();
     endsAt.current = performance.now() + lobby.remainingMs;
 
     // Joining is what puts a name on the board, so the room roster and the
@@ -351,7 +370,7 @@ export function useGame() {
       username,
       avatarSeed: seed,
       secure,
-      roomCode: roomCode.current,
+      roomCode: shownCode,
       lobby,
       remainingMs: lobby.remainingMs,
       board: qs.map((q) => ({

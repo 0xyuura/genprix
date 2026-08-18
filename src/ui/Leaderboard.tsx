@@ -133,7 +133,7 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
               >
                 <span
                   className={`num font-bold w-7 text-center ${
-                    lead ? "text-purple" : "text-white/40"
+                    lead && !racing ? "text-purple" : "text-white/40"
                   }`}
                 >
                   {i + 1}
@@ -164,7 +164,9 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
                   {e.wpm != null ? `${e.wpm}wpm` : "—"}
                 </span>
                 <span
-                  className={`num font-bold w-16 text-right ${lead ? "text-purple" : "text-teal"}`}
+                  className={`num font-bold w-16 text-right ${
+                    racing ? "text-white/35" : lead ? "text-purple" : "text-teal"
+                  }`}
                 >
                   {e.score.toLocaleString()}
                 </span>

@@ -48,12 +48,14 @@ export default function LobbyScreen({ code, username, lobby }: Props) {
       <div className="panel-kerb">
         <div className="px-5 pt-6 pb-5 text-center">
           {/* Five reds, all lit and holding. They go out when the host starts,
-              which on this screen means the screen itself is replaced. */}
+              which on this screen means the screen itself is replaced. The colour
+              is written out because `bg-kerb` is the red-and-white kerb stripe,
+              not the kerb colour — it would paint five candy-striped lamps. */}
           <div className="flex justify-center gap-2 mb-5" aria-hidden>
             {[0, 1, 2, 3, 4].map((i) => (
               <span
                 key={i}
-                className="w-5 h-5 rounded-full bg-flag lights-hold"
+                className="w-5 h-5 rounded-full bg-[#E01B2E] lights-hold"
                 style={{ animationDelay: `${i * 0.12}s` }}
               />
             ))}
