@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { checkAnswer, maskAnswer, type Question } from "./quiz";
+import { playSfx } from "../audio/sfx";
 import {
   runScore,
   SESSION_MS,
@@ -11,6 +12,7 @@ import {
   addPassage,
   applyInput,
   emptyTotals,
+  hasError,
   isComplete,
   newTyping,
   progressOf,
@@ -31,12 +33,15 @@ import {
   shareCodeLocal,
   type Lobby,
 } from "../data/rooms";
-import { joinRoom, answerQuestion, finishRun } from "../data/backend";
+import { joinRoom, answerQuestion, finishRun, revealHint } from "../data/backend";
 import { selectAdapter, currentBucket, type Entry } from "../data/leaderboard";
 import type { FxEvent } from "../race/RaceCanvas";
 import type { Mood } from "../race/race";
 
-export type Phase = "idle" | "lobby" | "playing" | "results";
+// "countdown" is the four seconds between the host pressing Start and the field
+// being allowed to type. The session clock is already running by then — it runs
+// on the server's start instant, so those seconds cost everyone the same.
+export type Phase = "idle" | "lobby" | "countdown" | "playing" | "results";
 
 /** How often a waiting player asks the room whether the host has started it. */
 const LOBBY_POLL_MS = 2000;
@@ -170,6 +175,7 @@ export function useGame() {
     if (finished.current) return;
     finished.current = true;
     clearTimers();
+    playSfx("finish");
 
     // Finishing does not close the room. The code belongs to the session, not to
     // this player: everyone else it was handed to still has to be able to race.
@@ -261,14 +267,22 @@ export function useGame() {
   }, []);
 
   /**
-   * Drop the lights. Called either straight from join (a room already under way)
-   * or by the lobby poll the moment the host starts it. The remaining time comes
-   * from whoever owns the clock — the server in secure mode — so every player's
-   * countdown reads the same, however long they sat in the waiting room.
+   * The host has started the room. The remaining time comes from whoever owns
+   * the clock — the server in secure mode — so every player's countdown reads
+   * the same, however long they sat in the waiting room.
+   *
+   * The clock is set here, but the field is held for another four seconds on the
+   * 3-2-1 lights. That is not a handicap: the session ends at a server instant
+   * everyone shares, so the countdown costs the whole room the same seconds.
    */
   const beginRun = useCallback((remainingMs: number) => {
     endsAt.current = performance.now() + remainingMs;
-    setState((s) => (s.phase === "lobby" ? { ...s, phase: "playing", remainingMs } : s));
+    setState((s) => (s.phase === "lobby" ? { ...s, phase: "countdown", remainingMs } : s));
+  }, []);
+
+  /** Lights out — called by the countdown when it reaches green. */
+  const dropLights = useCallback(() => {
+    setState((s) => (s.phase === "countdown" ? { ...s, phase: "playing" } : s));
   }, []);
 
   // Join the room by code. Joining puts you in the waiting room and on the
@@ -364,6 +378,10 @@ export function useGame() {
         });
     }
 
+    // Joining is the player's first gesture on the page, which is also the first
+    // moment a browser will let audio start at all.
+    playSfx("join");
+
     setState({
       ...initial,
       phase: lobby.started ? "playing" : "lobby",
@@ -386,6 +404,7 @@ export function useGame() {
   }, []);
 
   const select = useCallback((i: number) => {
+    if (stateRef.current.phase === "playing") playSfx("ui");
     setState((s) => {
       if (s.phase !== "playing" || i < 0 || i >= s.board.length) return s;
       return { ...s, selected: i, lastResult: null, mood: "idle" };
@@ -408,6 +427,26 @@ export function useGame() {
   // Typeracer stage: fold each keystroke into the open question's buffer. Completing
   // the passage banks its typing stats and unlocks the answer field.
   const typeInput = useCallback((next: string) => {
+    // The sound is decided out here, against committed state, and never inside
+    // the updater: React may run an updater twice, or not at the moment it is
+    // handed over, and neither is a thing to hang a side effect on. The field is
+    // controlled, so a keystroke cannot arrive before the previous one rendered
+    // and this buffer is the same one the updater is about to see.
+    const prev = stateRef.current;
+    if (prev.phase === "playing" && prev.selected != null) {
+      const cur = prev.board[prev.selected];
+      if (cur && !cur.solved && cur.stage === "prompt") {
+        const t = applyInput(cur.typing, next, performance.now());
+        if (t !== cur.typing) {
+          // A fresh error is the one worth hearing. Holding a wrong key down
+          // should not turn into a machine-gun, so only the transition speaks.
+          playSfx(
+            isComplete(t) ? "stage" : hasError(t) && !hasError(cur.typing) ? "typo" : "key",
+          );
+        }
+      }
+    }
+
     setState((s) => {
       if (s.phase !== "playing" || s.selected == null) return s;
       const idx = s.selected;
@@ -466,6 +505,7 @@ export function useGame() {
 
       fxId.current += 1;
       const fxEvent: FxEvent = { id: fxId.current, type: correct ? "boost" : "skid" };
+      playSfx(correct ? "correct" : "wrong");
 
       if (correct) {
         const newSolved = s.solvedCount + 1;
@@ -503,21 +543,49 @@ export function useGame() {
     [finish],
   );
 
-  // Spend one of the 2 session hints to reveal the first/last-letter mask for a question.
-  const useHint = useCallback((i: number): boolean => {
-    let granted = false;
-    setState((s) => {
-      if (s.phase !== "playing") return s;
-      const bq = s.board[i];
-      if (!bq || bq.solved) return s;
-      if (bq.hintMask) return s; // already revealed here, no charge
-      if (s.hintsLeft <= 0) return s;
-      granted = true;
-      const mask = maskAnswer(localQs.current[i].accepted[0]);
-      const board = s.board.map((b, idx) => (idx === i ? { ...b, hintMask: mask } : b));
-      return { ...s, board, hintsLeft: s.hintsLeft - 1 };
+  /**
+   * Spend one of the two session hints to reveal the first and last letter.
+   *
+   * In secure mode the mask can only come from the server: the client is sent
+   * prompts and hints, never `accepted`. Building it here from an answer that
+   * was never delivered is exactly what used to throw — inside a state updater,
+   * which took the whole React tree down and left a black screen mid-race.
+   */
+  const useHint = useCallback(async (i: number): Promise<boolean> => {
+    const s = stateRef.current;
+    if (s.phase !== "playing") return false;
+    const bq = s.board[i];
+    if (!bq || bq.solved) return false;
+    if (bq.hintMask) return false; // already revealed here, no charge
+    if (s.hintsLeft <= 0) return false;
+
+    let mask: string;
+    let hintsLeft = s.hintsLeft - 1;
+
+    if (runId.current && runToken.current) {
+      try {
+        const res = await revealHint(runId.current, runToken.current, bq.id);
+        mask = res.mask;
+        hintsLeft = res.hints_left; // the server's tally is the real one
+      } catch (e) {
+        setState((st) => ({
+          ...st,
+          notice: (e as Error).message || "Could not fetch that hint.",
+        }));
+        return false;
+      }
+    } else {
+      mask = maskAnswer(localQs.current[i]?.accepted[0]);
+      if (!mask) return false; // nothing to reveal; do not charge for it
+    }
+
+    setState((st) => {
+      if (st.phase !== "playing") return st;
+      const board = st.board.map((b, idx) => (idx === i ? { ...b, hintMask: mask } : b));
+      return { ...st, board, hintsLeft };
     });
-    return granted;
+    playSfx("hint");
+    return true;
   }, []);
 
   // Back to the start screen. The finished code is dead, so a new one is required.
@@ -577,5 +645,15 @@ export function useGame() {
 
   useEffect(() => clearTimers, []);
 
-  return { state, join, select, backToBoard, typeInput, submit, useHint, playAgain };
+  return {
+    state,
+    join,
+    select,
+    backToBoard,
+    typeInput,
+    submit,
+    useHint,
+    playAgain,
+    dropLights,
+  };
 }

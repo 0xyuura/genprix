@@ -10,7 +10,9 @@ interface Props {
   hintsLeft: number;
   lastResult: LastResult | null;
   onType: (next: string) => void;
-  onUseHint: (i: number) => boolean;
+  // Async because in secure mode the mask is built on the server — the browser is
+  // never given the answers it would need to build one itself.
+  onUseHint: (i: number) => Promise<boolean>;
   onSubmit: (answer: string) => void;
   onBack: () => void;
 }
@@ -26,6 +28,7 @@ function QuestionPanel({
   onBack,
 }: Props) {
   const [value, setValue] = useState("");
+  const [hintPending, setHintPending] = useState(false);
   const answerRef = useRef<HTMLInputElement>(null);
   const typeRef = useRef<HTMLInputElement>(null);
 
@@ -34,7 +37,18 @@ function QuestionPanel({
 
   useEffect(() => {
     setValue("");
+    setHintPending(false);
   }, [index]);
+
+  const askForHint = async () => {
+    if (hintPending) return;
+    setHintPending(true);
+    try {
+      await onUseHint(index);
+    } finally {
+      setHintPending(false);
+    }
+  };
 
   // Focus follows the stage: the passage field first, the answer field once unlocked.
   useEffect(() => {
@@ -68,7 +82,7 @@ function QuestionPanel({
     <section className="panel-kerb">
       <div className="flex items-center justify-between border-b border-line px-4 pt-4 pb-3">
         <h2 className="font-display font-bold uppercase tracking-[0.12em] text-ceramic">
-          <span className="num text-white/35 mr-2">{String(index + 1).padStart(2, "0")}</span>
+          <span className="num text-ceramic/35 mr-2">{String(index + 1).padStart(2, "0")}</span>
           Question
         </h2>
         <button className="stencil hover:text-teal transition-colors" onClick={onBack}>
@@ -82,20 +96,20 @@ function QuestionPanel({
           <span className={`stencil ${stage === "prompt" ? "!text-teal" : "!text-good"}`}>
             {stage === "prompt" ? "Stage 1 · retype the question" : "Stage 1 · cleared"}
           </span>
-          <span className="num text-[11px] text-white/45">
+          <span className="num text-[11px] text-ceramic/45">
             {liveWpm} wpm · {liveAcc}%
           </span>
         </div>
 
         <div
-          className={`border p-3 bg-black/40 ${
+          className={`border p-3 bg-sunken/40 ${
             erroring ? "border-bad/60" : stage === "answer" ? "border-good/30" : "border-line"
           }`}
         >
           <TypingPassage target={typing.target} typed={typing.typed} />
         </div>
 
-        <div className="mt-2 h-[3px] bg-white/10" aria-hidden>
+        <div className="mt-2 h-[3px] bg-ceramic/10" aria-hidden>
           <div
             className="h-full bg-teal transition-[width] duration-100"
             style={{ width: `${typedPct}%` }}
@@ -144,14 +158,18 @@ function QuestionPanel({
               </p>
             ) : hintsLeft > 0 ? (
               <button
-                className="text-sm text-teal/80 hover:text-teal flex items-center gap-2"
-                onClick={() => onUseHint(index)}
+                className="text-sm text-teal/80 hover:text-teal flex items-center gap-2
+                  disabled:opacity-50 disabled:cursor-wait"
+                onClick={askForHint}
+                disabled={hintPending}
               >
                 <Board size={13} />
-                Show the first and last letter ({hintsLeft} left)
+                {hintPending
+                  ? "Asking the pit wall…"
+                  : `Show the first and last letter (${hintsLeft} left)`}
               </button>
             ) : (
-              <span className="text-sm text-white/30">Both hints spent</span>
+              <span className="text-sm text-ceramic/30">Both hints spent</span>
             )}
           </div>
         )}

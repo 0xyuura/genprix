@@ -2,8 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* --- The two palettes ----------------------------------------------------- */
+/* Values are space-separated RGB channels so Tailwind's alpha modifiers work:
+   `rgb(var(--teal) / <alpha-value>)` in the config, `text-teal/70` in the markup.
+   index.html stamps data-theme on <html> before the first paint, so the page
+   never flashes the wrong one on the way in. */
+
+:root,
+:root[data-theme="dark"] {
   color-scheme: dark;
+
+  --ceramic: 245 245 245;
+  --chassis: 202 202 202;
+  --asphalt: 96 96 96;
+  --pit: 14 14 18;
+  --pitlight: 21 21 27;
+  --line: 38 38 47;
+  --sunken: 0 0 0;
+  --accentink: 7 7 7;
+
+  --teal: 47 225 214;
+  --good: 0 255 102;
+  --bad: 255 59 78;
+  --amber: 245 197 66;
+  --flag: 255 213 0;
+  --magenta: 230 59 211;
+
+  --page: 8 8 11;
+  --grid: 255 255 255;
+  --grid-alpha: 0.022;
+}
+
+/* Daylight. Not an inversion: the accents are re-picked so every one of them
+   still passes contrast on white — neon teal on paper is unreadable, so the day
+   race runs on a darker teal, and the text on a teal button flips to white. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --ceramic: 20 20 28;
+  --chassis: 68 68 80;
+  --asphalt: 128 128 140;
+  --pit: 255 255 255;
+  --pitlight: 240 240 245;
+  --line: 213 213 224;
+  --sunken: 224 224 234;
+  --accentink: 255 255 255;
+
+  --teal: 11 127 120;
+  --good: 12 128 60;
+  --bad: 199 16 46;
+  --amber: 150 100 0;
+  --flag: 138 108 0;
+  --magenta: 176 26 160;
+
+  --page: 244 244 247;
+  --grid: 0 0 0;
+  --grid-alpha: 0.045;
 }
 
 html,
@@ -14,16 +68,16 @@ body,
 
 body {
   margin: 0;
-  color: #f5f5f5;
+  color: rgb(var(--ceramic));
   font-family: "Inter", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  /* Painted asphalt, not a gradient: a flat dark ground with a faint grid, the
-     way a pit-lane floor is marked out. The grid is what stops the page from
-     reading as one endless black rectangle. */
-  background-color: #08080b;
+  /* Painted asphalt, not a gradient: a flat ground with a faint grid, the way a
+     pit-lane floor is marked out. The grid is what stops the page from reading
+     as one endless empty rectangle. */
+  background-color: rgb(var(--page));
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+    linear-gradient(rgba(var(--grid) / var(--grid-alpha)) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--grid) / var(--grid-alpha)) 1px, transparent 1px);
   background-size: 44px 44px, 44px 44px;
 }
 
@@ -46,7 +100,7 @@ body {
 
   .btn-arcade {
     @apply font-display font-bold uppercase tracking-[0.08em] rounded px-6 py-3
-      text-void bg-teal shadow-hard border border-black/40
+      text-accentink bg-teal shadow-hard border border-black/40
       transition-[transform,box-shadow] duration-75
       hover:brightness-110
       active:translate-x-[3px] active:translate-y-[3px] active:shadow-none
@@ -61,9 +115,9 @@ body {
   }
 
   .input-arcade {
-    @apply w-full rounded bg-black/50 border border-line px-4 py-3
-      font-display text-lg text-ceramic placeholder-white/25 outline-none
-      transition-colors focus:border-teal focus:bg-black/70;
+    @apply w-full rounded bg-sunken/50 border border-line px-4 py-3
+      font-display text-lg text-ceramic placeholder-ceramic/30 outline-none
+      transition-colors focus:border-teal focus:bg-sunken/70;
   }
 
   /* --- Timing screen ----------------------------------------------------- */
@@ -74,7 +128,7 @@ body {
   }
   /* Small trackside label. Letterspaced caps, the way a pit board is stencilled. */
   .stencil {
-    @apply font-display font-bold uppercase tracking-[0.18em] text-[11px] text-white/45;
+    @apply font-display font-bold uppercase tracking-[0.18em] text-[11px] text-ceramic/50;
   }
   /* One row of the leaderboard. */
   .board-row {
@@ -90,12 +144,38 @@ body {
 
   /* --- Start-light gantry ------------------------------------------------ */
   .light {
-    @apply w-3 h-3 rounded-full bg-white/10 border border-black/60;
+    @apply w-3 h-3 rounded-full bg-ceramic/10 border border-black/60;
   }
   .light-on {
     background: #e01b2e;
     box-shadow: 0 0 10px rgba(224, 27, 46, 0.8);
   }
+}
+
+/* --- Daylight legibility floor -------------------------------------------- */
+/* The quiet tiers of text are alphas of the foreground colour, and the same
+   alpha does not carry the same weight both ways round: white at 30% on near
+   black is a legible whisper, near-black at 30% on paper is about 2.5:1 and
+   simply cannot be read. Rather than raise the alphas everywhere — which would
+   flatten the hierarchy at night, where it works — the floor is lifted only
+   where the page is light. */
+:root[data-theme="light"] .text-ceramic\/25,
+:root[data-theme="light"] .text-ceramic\/30,
+:root[data-theme="light"] .text-ceramic\/35 {
+  color: rgb(var(--ceramic) / 0.62);
+}
+:root[data-theme="light"] .text-ceramic\/40,
+:root[data-theme="light"] .text-ceramic\/45,
+:root[data-theme="light"] .text-ceramic\/50,
+:root[data-theme="light"] .text-ceramic\/55,
+:root[data-theme="light"] .text-ceramic\/60,
+/* .stencil sets its colour inside the component rule, so the utility selectors
+   above never see it. */
+:root[data-theme="light"] .stencil {
+  color: rgb(var(--ceramic) / 0.72);
+}
+:root[data-theme="light"] .input-arcade::placeholder {
+  color: rgb(var(--ceramic) / 0.5);
 }
 
 /* --- Motion -------------------------------------------------------------- */
@@ -113,7 +193,7 @@ body {
 @keyframes light-seq {
   0%,
   8% {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgb(var(--ceramic) / 0.1);
     box-shadow: none;
   }
   12%,
@@ -123,7 +203,7 @@ body {
   }
   76%,
   100% {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgb(var(--ceramic) / 0.1);
     box-shadow: none;
   }
 }

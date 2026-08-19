@@ -94,7 +94,7 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
       </h1>
       <div className="mt-3 h-[5px] w-40 bg-kerb" style={{ backgroundSize: "28px 5px" }} />
 
-      <p className="mt-4 text-white/70 max-w-xl">
+      <p className="mt-4 text-ceramic/70 max-w-xl">
         Ten questions on GenLayer. Retype each one character for character to move your kart, then
         type the answer to take the checkpoint. Miss a character and the kart stops until you
         backspace it.
@@ -160,7 +160,7 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
           <button className="btn-arcade w-full sm:w-auto" onClick={() => setJoining(true)}>
             Join quiz
           </button>
-          <p className="mt-3 text-xs text-white/35">
+          <p className="mt-3 text-xs text-ceramic/35">
             Bring a name and the room code your host read out. You'll wait on the grid with
             everyone else until they start the room.
           </p>
@@ -195,7 +195,7 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
             Join the race
           </button>
           {roomOpen === false && (
-            <p className="text-xs text-white/35">
+            <p className="text-xs text-ceramic/35">
               Nothing open on this device, which is normal for a guest. The host's code carries the
               questions with it and runs for 15 minutes from the moment they made it.
             </p>
@@ -229,7 +229,7 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
       >
         <div className="ticker-track flex w-max gap-8 whitespace-nowrap">
           {[...NOTES, ...NOTES].map((note, i) => (
-            <span key={i} className="stencil !text-[10px] !text-white/30">
+            <span key={i} className="stencil !text-[10px] !text-ceramic/30">
               {note}
             </span>
           ))}
@@ -241,7 +241,7 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
         <span className="stencil !text-[10px]">
           Built by{" "}
           <a
-            className="text-white/60 hover:text-teal"
+            className="text-ceramic/60 hover:text-teal"
             href="https://x.com/0xyuura"
             target="_blank"
             rel="noopener noreferrer"
@@ -250,7 +250,7 @@ export default function StartScreen({ onJoin, onShowLeaderboard, initialName = "
           </a>
           {" & "}
           <a
-            className="text-white/60 hover:text-teal"
+            className="text-ceramic/60 hover:text-teal"
             href="https://x.com/Bas_Basterx"
             target="_blank"
             rel="noopener noreferrer"

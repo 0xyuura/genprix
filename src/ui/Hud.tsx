@@ -50,7 +50,7 @@ export default function Hud({
       <div className="px-3 py-2 flex-1 min-w-[132px]">
         <div className="flex items-baseline justify-between">
           <span className="stencil !text-[10px]">Checkpoints</span>
-          <span className="num text-xs text-white/60">
+          <span className="num text-xs text-ceramic/60">
             {solvedCount}/{total}
           </span>
         </div>
@@ -60,7 +60,7 @@ export default function Hud({
           {Array.from({ length: total }, (_, i) => (
             <span
               key={i}
-              className={`h-2.5 flex-1 ${i < solvedCount ? "bg-good" : "bg-white/10"}`}
+              className={`h-2.5 flex-1 ${i < solvedCount ? "bg-good" : "bg-ceramic/10"}`}
             />
           ))}
         </div>
@@ -68,14 +68,14 @@ export default function Hud({
 
       <div className="px-3 py-2 hidden sm:block">
         <div className="stencil !text-[10px]">Typing</div>
-        <div className="num text-sm text-white/70 mt-1">
+        <div className="num text-sm text-ceramic/70 mt-1">
           {Math.round(wpm)} wpm · {Math.round(accuracy * 100)}%
         </div>
       </div>
 
       <div className="px-3 py-2 hidden sm:block">
         <div className="stencil !text-[10px]">Hints</div>
-        <div className="num text-sm text-white/70 mt-1">{hintsLeft} left</div>
+        <div className="num text-sm text-ceramic/70 mt-1">{hintsLeft} left</div>
       </div>
 
       <div className="px-3 py-2 text-right">

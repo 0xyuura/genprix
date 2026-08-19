@@ -3,26 +3,42 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      // Every token that changes between the night race and the day race resolves
+      // to a CSS variable, defined twice in index.css. That is what makes the
+      // light/dark switch one attribute on <html> rather than a second set of
+      // classes on every element — and it keeps the alpha modifiers working, so
+      // `text-ceramic/45` is still a valid, theme-aware class.
+      //
+      // The few fixed ones below are fixed on purpose: a kerb is red and a
+      // chequered flag is black and white in any light.
       colors: {
-        // GenLayer brand.
         cobalt: "#110FFF",
         void: "#070707",
-        magenta: "#E63BD3",
         purple: "#7A2BF5",
-        teal: "#2FE1D6",
-        good: "#00FF66",
-        bad: "#FF3B4E",
-        amber: "#F5C542",
-        ceramic: "#F5F5F5",
-        chassis: "#CACACA",
-        asphalt: "#606060",
-        // Trackside surfaces and signals. A timing screen has no glass in it:
-        // panels are painted metal, so they get a solid colour, not a blur.
-        pit: "#0E0E12",
-        pitlight: "#15151B",
-        line: "#26262F",
         kerb: "#E01B2E",
-        flag: "#FFD500",
+
+        magenta: "rgb(var(--magenta) / <alpha-value>)",
+        teal: "rgb(var(--teal) / <alpha-value>)",
+        good: "rgb(var(--good) / <alpha-value>)",
+        bad: "rgb(var(--bad) / <alpha-value>)",
+        amber: "rgb(var(--amber) / <alpha-value>)",
+        flag: "rgb(var(--flag) / <alpha-value>)",
+        // Foreground. Named for the ceramic-white it is at night; it is near-black
+        // by day, and it is what every piece of text on the page is drawn in.
+        ceramic: "rgb(var(--ceramic) / <alpha-value>)",
+        chassis: "rgb(var(--chassis) / <alpha-value>)",
+        asphalt: "rgb(var(--asphalt) / <alpha-value>)",
+        // Trackside surfaces. A timing screen has no glass in it: panels are
+        // painted metal, so they get a solid colour, not a blur.
+        pit: "rgb(var(--pit) / <alpha-value>)",
+        pitlight: "rgb(var(--pitlight) / <alpha-value>)",
+        line: "rgb(var(--line) / <alpha-value>)",
+        // Anything recessed into a panel — input wells, code blocks, the passage
+        // box. Always used with an alpha, so it tints the panel behind it.
+        sunken: "rgb(var(--sunken) / <alpha-value>)",
+        // Text drawn on top of a bright accent fill. Near-black on teal at night,
+        // white on the darker teal by day; neither theme can use the other's.
+        accentink: "rgb(var(--accentink) / <alpha-value>)",
       },
       fontFamily: {
         display: ['"Chakra Petch"', "system-ui", "sans-serif"],

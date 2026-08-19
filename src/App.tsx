@@ -11,6 +11,8 @@ import ResultsScreen from "./ui/ResultsScreen";
 import LobbyScreen from "./ui/LobbyScreen";
 import Leaderboard from "./ui/Leaderboard";
 import AdminPanel from "./ui/AdminPanel";
+import Countdown from "./ui/Countdown";
+import Controls from "./ui/Controls";
 import { Lock } from "./ui/Glyph";
 
 type View = "game" | "leaderboard" | "admin";
@@ -23,7 +25,8 @@ function initialView(): View {
 }
 
 export default function App() {
-  const { state, join, select, backToBoard, typeInput, submit, useHint, playAgain } = useGame();
+  const { state, join, select, backToBoard, typeInput, submit, useHint, playAgain, dropLights } =
+    useGame();
   const [view, setView] = useState<View>(initialView);
   // Only guard while a round is actually live — never on the start/results screens.
   const { masked, warning } = useCaptureGuard(view === "game" && state.phase === "playing");
@@ -51,7 +54,7 @@ export default function App() {
         title="Admin access"
         aria-label="Admin access"
         className="fixed bottom-4 right-4 z-50 grid place-items-center w-11 h-11 rounded
-          bg-pit hover:bg-pitlight border border-line text-white/50 hover:text-teal
+          bg-pit hover:bg-pitlight border border-line text-ceramic/50 hover:text-teal
           shadow-hardsm transition-colors"
       >
         <Lock size={16} />
@@ -86,7 +89,7 @@ export default function App() {
       />
     );
   } else {
-    // playing
+    // playing — and the countdown, which is the same screen with the lights over it
     const openBq = state.selected != null ? state.board[state.selected] : null;
     screen = (
       <div className="mx-auto max-w-3xl px-4 py-5">
@@ -149,7 +152,10 @@ export default function App() {
   return (
     <>
       {screen}
+      <Controls />
       <AdminFab />
+      {/* The host has gone green: 3 · 2 · 1 over the board everyone is about to play. */}
+      {view === "game" && state.phase === "countdown" && <Countdown onDone={dropLights} />}
     </>
   );
 }

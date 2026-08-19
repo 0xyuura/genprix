@@ -17,6 +17,26 @@
          without WebP skip this and let mascot.ts fall back to the PNG. -->
     <link rel="preload" as="image" href="/brand/mochi-kart.webp" type="image/webp" />
     <title>GenLayer Grand Prix</title>
+    <script>
+      // Pick the theme before the first paint. Doing this in React instead means
+      // the page renders dark, then flips — a white flash on a projector at the
+      // front of a room is worse than no light mode at all.
+      (function () {
+        try {
+          var saved = localStorage.getItem("ggp_theme");
+          var theme =
+            saved === "light" || saved === "dark"
+              ? saved
+              : window.matchMedia("(prefers-color-scheme: light)").matches
+                ? "light"
+                : "dark";
+          document.documentElement.setAttribute("data-theme", theme);
+          document.documentElement.style.colorScheme = theme;
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

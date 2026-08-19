@@ -15,6 +15,7 @@ import {
 } from "../data/rooms";
 import { DEFAULT_QUESTIONS } from "../game/quiz";
 import Avatar from "./Avatar";
+import Countdown from "./Countdown";
 import { avatarSeed } from "../game/username";
 
 const fmtLeft = (ms: number): string => {
@@ -77,6 +78,7 @@ export default function AdminPanel({ onBack }: Props) {
 
   const seats = Math.max(0, ROOM_CAPACITY - (lobby?.count ?? 0));
   const waiting = lobby?.players ?? [];
+  const [counting, setCounting] = useState(false);
 
   const start = async () => {
     if (!code) return;
@@ -85,6 +87,9 @@ export default function AdminPanel({ onBack }: Props) {
     try {
       await startGameAny(passcode, code);
       setLobby((l) => (l ? { ...l, started: true } : l));
+      // The host watches the same lights the room does. On a projector this is
+      // the whole point: everyone counts down off one screen.
+      setCounting(true);
     } catch (e) {
       setMsg((e as Error).message || "Could not start the game.");
     } finally {
@@ -172,11 +177,12 @@ export default function AdminPanel({ onBack }: Props) {
 
   return (
     <Shell onBack={onBack}>
+      {counting && <Countdown onDone={() => setCounting(false)} />}
       <div className="flex items-center justify-between mb-3 gap-3">
         <h1 className="font-display font-bold uppercase tracking-[0.1em] text-xl text-ceramic">
           Set the questions
         </h1>
-        <button className="btn-arcade !py-2 !px-4 text-sm !bg-magenta !text-white" onClick={create} disabled={busy}>
+        <button className="btn-arcade !py-2 !px-4 text-sm !bg-magenta !text-accentink" onClick={create} disabled={busy}>
           {busy ? "…" : "Open a room"}
         </button>
       </div>
@@ -185,7 +191,7 @@ export default function AdminPanel({ onBack }: Props) {
           what their edits cost and give them one click back to short. */}
       {edits > 0 && (
         <div className="panel border-amber/40 p-3 mb-3 flex items-center justify-between gap-3">
-          <p className="text-xs text-white/60">
+          <p className="text-xs text-ceramic/60">
             {edits} of {questions.length} questions differ from the built-in set. The code has to
             carry {edits === 1 ? "it" : "them"}, which is what makes it long.
           </p>
@@ -198,7 +204,7 @@ export default function AdminPanel({ onBack }: Props) {
         </div>
       )}
 
-      <p className="text-xs text-white/45 mb-4">
+      <p className="text-xs text-ceramic/45 mb-4">
         Edit the ten questions, then open a room. Everyone who types the code waits on the grid
         until you press Start, and the ten minutes then run for the whole field at once. A code
         lives 15 minutes and seats {ROOM_CAPACITY} players at one run each; after that you open a
@@ -220,7 +226,7 @@ export default function AdminPanel({ onBack }: Props) {
                 >
                   {copied === "code" ? "Code copied" : "Copy code"}
                 </button>
-                <p className="mt-3 text-xs text-white/45">
+                <p className="mt-3 text-xs text-ceramic/45">
                   Players open the site, tap Join quiz, and type a name and this code. It works on a
                   phone that has never seen this room: the code carries the questions.
                 </p>
@@ -228,10 +234,10 @@ export default function AdminPanel({ onBack }: Props) {
             ) : (
               <>
                 <p className="stencil">Room {code} open</p>
-                <p className="mt-2 text-sm text-white/60">
+                <p className="mt-2 text-sm text-ceramic/60">
                   Your edits are too long to read out, so send the link instead.
                 </p>
-                <p className="mt-2 mx-auto max-w-full truncate border border-line bg-black/50 px-3 py-2 num text-xs text-teal/80">
+                <p className="mt-2 mx-auto max-w-full truncate border border-line bg-sunken/50 px-3 py-2 num text-xs text-teal/80">
                   {shareLink}
                 </p>
                 <button
@@ -240,7 +246,7 @@ export default function AdminPanel({ onBack }: Props) {
                 >
                   {copied === "link" ? "Copied" : "Copy link"}
                 </button>
-                <p className="mt-3 text-xs text-white/45">
+                <p className="mt-3 text-xs text-ceramic/45">
                   Reset to the built-in questions if you want a code short enough to say out loud.
                 </p>
               </>
@@ -255,7 +261,7 @@ export default function AdminPanel({ onBack }: Props) {
               <p className="stencil !text-good text-center">
                 Green flag · the room is racing
                 {waiting.length > 0 && (
-                  <span className="!text-white/45">
+                  <span className="!text-ceramic/45">
                     {" · "}
                     <span className="num">{waiting.length}</span> away
                   </span>
@@ -264,13 +270,13 @@ export default function AdminPanel({ onBack }: Props) {
             ) : (
               <>
                 <button
-                  className="btn-arcade w-full !bg-good !text-black"
+                  className="btn-arcade w-full !bg-good !text-accentink"
                   onClick={start}
                   disabled={busy || left <= 0}
                 >
                   {busy ? "…" : `Start the game${waiting.length ? ` · ${waiting.length}` : ""}`}
                 </button>
-                <p className="mt-2 text-xs text-white/45 text-center">
+                <p className="mt-2 text-xs text-ceramic/45 text-center">
                   {left <= 0
                     ? "This code has expired. Open a new room to start one."
                     : waiting.length === 0
@@ -284,11 +290,11 @@ export default function AdminPanel({ onBack }: Props) {
               <ol className="mt-3 max-h-40 overflow-y-auto border border-line divide-y divide-line/60">
                 {waiting.map((p, i) => (
                   <li key={`${p}-${i}`} className="flex items-center gap-2.5 px-2.5 py-1.5">
-                    <span className="num text-xs text-white/30 w-6 text-center">
+                    <span className="num text-xs text-ceramic/30 w-6 text-center">
                       {String(i + 1).padStart(2, "0")}
                     </span>
                     <Avatar seed={avatarSeed(p)} name={p} size={22} />
-                    <span className="text-sm text-white/75 truncate">{p}</span>
+                    <span className="text-sm text-ceramic/75 truncate">{p}</span>
                   </li>
                 ))}
               </ol>
@@ -306,7 +312,7 @@ export default function AdminPanel({ onBack }: Props) {
                   Closes in <span className="num !text-amber font-bold">{fmtLeft(left)}</span>
                 </span>
                 <span className="stencil">
-                  <span className="num text-white/70">{seats}</span> of {ROOM_CAPACITY} seats left
+                  <span className="num text-ceramic/70">{seats}</span> of {ROOM_CAPACITY} seats left
                 </span>
               </>
             ) : (
@@ -322,7 +328,7 @@ export default function AdminPanel({ onBack }: Props) {
       <div className="space-y-3">
         {questions.map((q, i) => (
           <div key={i} className="panel p-4 pl-11 relative">
-            <span className="num absolute left-0 top-0 bottom-0 w-8 grid place-items-center text-sm text-white/30 border-r border-line">
+            <span className="num absolute left-0 top-0 bottom-0 w-8 grid place-items-center text-sm text-ceramic/30 border-r border-line">
               {String(i + 1).padStart(2, "0")}
             </span>
             <label className="stencil block mb-1">Question</label>

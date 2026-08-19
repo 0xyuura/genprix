@@ -89,6 +89,10 @@ create table if not exists runs (
 -- dropped out from under a live database.
 alter table runs add column if not exists answered text[] not null default '{}';
 
+-- Hints are counted here rather than in the browser, so a reload cannot refill
+-- them. Must track HINTS_PER_SESSION in src/game/scoring.ts.
+alter table runs add column if not exists hints_used int not null default 0;
+
 -- Finalized leaderboard rows. One per run, written by join_room the moment a
 -- player takes a seat and updated as they answer and when they finish.
 create table if not exists scores (
@@ -602,6 +606,74 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- mask_answer / reveal_hint: the first and last letter, and nothing else.
+--
+-- The mask has to be built here. The client is sent prompts and hints, never
+-- `accepted`, so a browser asked to mask an answer it was quite correctly never
+-- given had nothing to work with — and threw, inside a React state updater,
+-- which unmounted the app and left a black screen mid-race.
+-- ---------------------------------------------------------------------------
+create or replace function mask_answer(p_answer text)
+returns text language plpgsql immutable
+set search_path = public, pg_temp as $$
+declare
+  v_chars text[];
+  v_last  int;
+  v_out   text[] := '{}';
+  i       int;
+  ch      text;
+begin
+  v_chars := regexp_split_to_array(btrim(coalesce(p_answer, '')), '');
+  v_last  := array_length(v_chars, 1);
+  if v_last is null then return ''; end if;
+  for i in 1..v_last loop
+    ch := v_chars[i];
+    if ch = ' ' then
+      v_out := array_append(v_out, ' ');
+    elsif i = 1 or i = v_last then
+      v_out := array_append(v_out, ch);
+    else
+      v_out := array_append(v_out, '_');
+    end if;
+  end loop;
+  -- Joined with spaces, exactly as maskAnswer does in src/game/quiz.ts, so the
+  -- local and shared modes read identically on screen.
+  return array_to_string(v_out, ' ');
+end;
+$$;
+
+create or replace function reveal_hint(p_run_id uuid, p_token uuid, p_question_id text)
+returns jsonb language plpgsql
+security definer set search_path = public, extensions, pg_temp as $$
+declare
+  v_run runs%rowtype;
+  v_q   questions%rowtype;
+  v_max int := 2;   -- must track HINTS_PER_SESSION in src/game/scoring.ts
+begin
+  select * into v_run from runs where id = p_run_id and token = p_token for update;
+  if not found then raise exception 'invalid run or token'; end if;
+  if v_run.finished then raise exception 'run already finished'; end if;
+
+  select * into v_q from questions where round = v_run.round and qid = p_question_id;
+  if not found then raise exception 'no such question in this round'; end if;
+  if p_question_id = any(v_run.answered) then
+    raise exception 'question already answered';
+  end if;
+
+  if v_run.hints_used >= v_max then
+    raise exception 'both hints spent';
+  end if;
+
+  update runs set hints_used = hints_used + 1 where id = v_run.id returning * into v_run;
+
+  return jsonb_build_object(
+    'mask',       mask_answer(v_q.accepted[1]),
+    'hints_left', greatest(0, v_max - v_run.hints_used)
+  );
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- Admin RPCs (passcode + lockout protected)
 -- ---------------------------------------------------------------------------
 create or replace function admin_get_questions(p_passcode text)
@@ -776,6 +848,9 @@ grant execute on function join_room(text, text, text)                  to anon, 
 grant execute on function room_lobby(text)                             to anon, authenticated;
 grant execute on function answer_question(uuid, uuid, text, text)      to anon, authenticated;
 grant execute on function finish_run(uuid, uuid)                       to anon, authenticated;
+grant execute on function reveal_hint(uuid, uuid, text)                to anon, authenticated;
+-- mask_answer stays ungranted: it masks any string handed to it, which is only
+-- useful to somebody who already has the answer.
 grant execute on function start_game(text, text)                       to anon, authenticated;
 grant execute on function admin_get_questions(text)                    to anon, authenticated;
 grant execute on function admin_publish_questions(text, jsonb, boolean) to anon, authenticated;

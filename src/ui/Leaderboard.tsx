@@ -70,7 +70,7 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
       {!isSecureMode() && (
         <div className="panel caution-stripe border-flag/40 px-3 py-2.5 mb-3">
           <p className="stencil !text-flag">Scores are not shared yet</p>
-          <p className="text-xs text-white/70 mt-1">
+          <p className="text-xs text-ceramic/70 mt-1">
             This board is stored in your own browser, so every player currently sees only their
             own run. Connect a database and the same board opens for everybody, on every device.
           </p>
@@ -82,7 +82,7 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
           <span className={`stencil ${isSecureMode() ? "!text-good" : ""}`}>
             {isSecureMode() ? "Shared board · everyone sees this" : "This browser only"}
             {entries && entries.length > 0 && (
-              <span className="!text-white/45">
+              <span className="!text-ceramic/45">
                 {" · "}
                 <span className="num">{entries.length}</span>{" "}
                 {entries.length === 1 ? "player" : "players"}
@@ -92,7 +92,7 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
           <span className="stencil !text-amber">Resets in {fmt(resetIn)}</span>
         </div>
 
-        <p className="px-3 py-2.5 text-xs text-white/45 border-b border-line">
+        <p className="px-3 py-2.5 text-xs text-ceramic/45 border-b border-line">
           Everyone who joins a room is listed here from the moment they join. Ranked by correct
           answers first, then the time you had left, then how cleanly you typed.
         </p>
@@ -110,9 +110,9 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
         </div>
 
         {error && <p className="px-3 py-4 text-bad text-sm">{error}</p>}
-        {!entries && !error && <p className="px-3 py-4 text-white/45 text-sm">Loading scores…</p>}
+        {!entries && !error && <p className="px-3 py-4 text-ceramic/45 text-sm">Loading scores…</p>}
         {entries && entries.length === 0 && (
-          <p className="px-3 py-4 text-white/45 text-sm">Nobody has joined a room this window.</p>
+          <p className="px-3 py-4 text-ceramic/45 text-sm">Nobody has joined a room this window.</p>
         )}
 
       {/* A full field is a thousand rows, so the list scrolls inside the panel
@@ -133,7 +133,7 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
               >
                 <span
                   className={`num font-bold w-7 text-center ${
-                    lead && !racing ? "text-purple" : "text-white/40"
+                    lead && !racing ? "text-purple" : "text-ceramic/40"
                   }`}
                 >
                   {i + 1}
@@ -145,27 +145,27 @@ export default function Leaderboard({ onBack, highlightUser }: Props) {
                 </span>
                 <span
                   className={`num text-sm w-10 text-right ${
-                    e.correct === 10 ? "text-good" : "text-white/45"
+                    e.correct === 10 ? "text-good" : "text-ceramic/45"
                   }`}
                 >
                   {e.correct}/10
                 </span>
                 <span
                   className={`num text-sm w-14 text-right ${
-                    racing ? "!text-amber !text-[10px] uppercase tracking-wider" : "text-white/60"
+                    racing ? "!text-amber !text-[10px] uppercase tracking-wider" : "text-ceramic/60"
                   }`}
                 >
                   {racing ? "racing" : `${(e.totalMs / 1000).toFixed(1)}s`}
                 </span>
-                <span className="num text-sm text-white/45 w-10 text-right hidden md:inline">
+                <span className="num text-sm text-ceramic/45 w-10 text-right hidden md:inline">
                   {e.accuracy != null ? `${Math.round(e.accuracy * 100)}%` : "—"}
                 </span>
-                <span className="num text-sm text-white/45 w-14 text-right hidden lg:inline">
+                <span className="num text-sm text-ceramic/45 w-14 text-right hidden lg:inline">
                   {e.wpm != null ? `${e.wpm}wpm` : "—"}
                 </span>
                 <span
                   className={`num font-bold w-16 text-right ${
-                    racing ? "text-white/35" : lead ? "text-purple" : "text-teal"
+                    racing ? "text-ceramic/35" : lead ? "text-purple" : "text-teal"
                   }`}
                 >
                   {e.score.toLocaleString()}

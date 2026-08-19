@@ -50,6 +50,19 @@ describe("maskAnswer", () => {
     expect(revealed("optimistic democracy")).toBe("oy"); // only global first/last shown
     expect(m).toMatch(/\S {3}\S/); // a 3-space gap marks the word boundary
   });
+
+  // The black-screen regression. In secure mode the server never sends
+  // `accepted`, so accepted[0] is undefined; this used to throw inside a React
+  // state updater, which unmounted the whole app mid-race. There is nothing to
+  // reveal in that case — the caller asks the server — but it must not throw.
+  it("returns an empty mask instead of throwing when there is no answer", () => {
+    expect(maskAnswer(undefined)).toBe("");
+    expect(maskAnswer(null)).toBe("");
+    expect(maskAnswer("")).toBe("");
+    expect(maskAnswer("   ")).toBe("");
+    expect(([] as string[])[0]).toBeUndefined(); // exactly what secure mode passes
+    expect(maskAnswer(([] as string[])[0])).toBe("");
+  });
 });
 
 describe("DEFAULT_QUESTIONS", () => {

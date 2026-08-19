@@ -43,7 +43,7 @@ export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }:
             <h1 className="font-display font-bold uppercase tracking-[0.1em] text-2xl text-ceramic leading-none">
               {perfect ? "Clean sweep" : "Race complete"}
             </h1>
-            <p className="text-sm text-white/55 mt-1 truncate">
+            <p className="text-sm text-ceramic/55 mt-1 truncate">
               {perfect
                 ? "All ten checkpoints, no misses. A true GenLayer maxi."
                 : `Your kart stopped at checkpoint ${state.solvedCount} of 10.`}
@@ -78,7 +78,7 @@ export default function ResultsScreen({ state, onPlayAgain, onShowLeaderboard }:
         </p>
       )}
 
-      <p className="mt-3 text-white/45 text-sm">
+      <p className="mt-3 text-ceramic/45 text-sm">
         That was your run on this code. The room may still be open for the others, so ask the host
         for a new code when you want another go.
       </p>

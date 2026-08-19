@@ -41,7 +41,7 @@ function QuestionBoard({ board, onSelect }: Props) {
         </span>
       </div>
 
-      <p className="px-4 pt-3 text-xs text-white/45">
+      <p className="px-4 pt-3 text-xs text-ceramic/45">
         Any order you like. A half-typed question keeps its progress, so you can leave one and come
         back to it.
       </p>
@@ -66,7 +66,7 @@ function QuestionBoard({ board, onSelect }: Props) {
                   border-r ${
                     q.solved
                       ? "border-good/30 text-good/70 bg-good/[0.06]"
-                      : "border-line text-white/35 group-hover:text-teal"
+                      : "border-line text-ceramic/35 group-hover:text-teal"
                   }`}
               >
                 {String(i + 1).padStart(2, "0")}
@@ -79,14 +79,14 @@ function QuestionBoard({ board, onSelect }: Props) {
               </div>
               <p
                 className={`mt-1 text-sm leading-snug ${
-                  q.solved ? "text-white/35" : "text-ceramic"
+                  q.solved ? "text-ceramic/35" : "text-ceramic"
                 }`}
               >
                 {q.prompt}
               </p>
 
               {!q.solved && q.typing.typed.length > 0 && (
-                <div className="mt-2 h-[3px] bg-white/10" aria-hidden>
+                <div className="mt-2 h-[3px] bg-ceramic/10" aria-hidden>
                   <div className="h-full bg-teal" style={{ width: `${progressOf(q.typing) * 100}%` }} />
                 </div>
               )}

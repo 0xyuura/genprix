@@ -64,7 +64,7 @@ export default function LobbyScreen({ code, username, lobby }: Props) {
           <h1 className="font-display font-bold uppercase leading-none text-ceramic text-3xl sm:text-4xl tracking-tight">
             Hold on the grid
           </h1>
-          <p className="mt-3 text-sm text-white/60 max-w-md mx-auto">
+          <p className="mt-3 text-sm text-ceramic/60 max-w-md mx-auto">
             You're in. The host sets everyone off together, so the ten minutes start for the whole
             room at once — nobody loses time waiting for the rest to arrive.
           </p>
@@ -90,11 +90,11 @@ export default function LobbyScreen({ code, username, lobby }: Props) {
           form. Everyone here is already on the leaderboard. */}
       <div className="panel mt-4">
         <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-          <Chequer size={12} className="text-white/50" />
+          <Chequer size={12} className="text-ceramic/50" />
           <span className="stencil">Starting grid</span>
         </div>
         {players.length === 0 ? (
-          <p className="px-3 py-4 text-sm text-white/45">Nobody else yet. You're first out.</p>
+          <p className="px-3 py-4 text-sm text-ceramic/45">Nobody else yet. You're first out.</p>
         ) : (
           <ol className="max-h-[46vh] overflow-y-auto grid sm:grid-cols-2">
             {players.map((p, i) => {
@@ -106,7 +106,7 @@ export default function LobbyScreen({ code, username, lobby }: Props) {
                     me ? "bg-teal/[0.08]" : ""
                   }`}
                 >
-                  <span className="num text-xs text-white/30 w-6 text-center">
+                  <span className="num text-xs text-ceramic/30 w-6 text-center">
                     {String(i + 1).padStart(2, "0")}
                   </span>
                   <Avatar seed={avatarSeed(p)} name={p} size={26} />
@@ -121,7 +121,7 @@ export default function LobbyScreen({ code, username, lobby }: Props) {
         )}
       </div>
 
-      <p className="mt-4 text-xs text-white/35">
+      <p className="mt-4 text-xs text-ceramic/35">
         Keep this page open. It goes green on its own the moment the host starts the quiz.
       </p>
     </div>

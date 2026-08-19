@@ -47,8 +47,13 @@ function levenshtein(a: string, b: string): number {
 // Hint mask: reveal only the FIRST and LAST visible character of the canonical
 // answer; every other character becomes "_" (spaces are preserved so word count
 // shows). E.g. "intelligent" -> "i _ _ _ _ _ _ _ _ _ t".
-export function maskAnswer(answer: string): string {
-  const chars = [...answer.trim()];
+// Takes an optional string on purpose. In secure mode `accepted` is empty — the
+// server holds the answers — and passing accepted[0] here handed it undefined,
+// which threw inside a React state updater and blanked the screen. There is
+// nothing to reveal in that case, and the caller asks the server instead.
+export function maskAnswer(answer: string | undefined | null): string {
+  const chars = [...(answer ?? "").trim()];
+  if (chars.length === 0) return "";
   const lastIdx = chars.length - 1;
   return chars
     .map((ch, i) => {

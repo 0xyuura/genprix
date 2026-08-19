@@ -11,11 +11,11 @@ interface Props {
 // behind the kart. Colouring every typed character green looks busy and makes
 // the characters that matter compete with the ones that no longer do.
 const cls: Record<CharState, string> = {
-  correct: "text-white/30",
+  correct: "text-ceramic/30",
   // Sitting in the buffer and blocking progress until it is backspaced away.
-  wrong: "text-void bg-bad",
+  wrong: "text-accentink bg-bad",
   // The character owed next: a solid block cursor, no blinking.
-  current: "text-void bg-teal",
+  current: "text-accentink bg-teal",
   pending: "text-ceramic",
 };
 

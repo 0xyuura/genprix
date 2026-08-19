@@ -48,6 +48,12 @@ export interface FinishResult {
   rank: number;
 }
 
+export interface HintResult {
+  /** First and last character of the answer; everything else "_". */
+  mask: string;
+  hints_left: number;
+}
+
 export interface AdminQuestion {
   id: string;
   prompt: string;
@@ -86,6 +92,18 @@ export const answerQuestion = (
 
 export const finishRun = (run_id: string, token: string) =>
   rpc<FinishResult>("finish_run", { p_run_id: run_id, p_token: token });
+
+/**
+ * Spend a hint. The mask has to be built on the server: in secure mode the
+ * client is never sent `accepted`, so it has nothing to mask and used to throw
+ * trying. The server also counts the two hints, so a reload cannot refill them.
+ */
+export const revealHint = (run_id: string, token: string, question_id: string) =>
+  rpc<HintResult>("reveal_hint", {
+    p_run_id: run_id,
+    p_token: token,
+    p_question_id: question_id,
+  });
 
 /** Who is in the room and whether the host has started it. Safe for anyone holding the code. */
 export const roomLobby = (code: string) => rpc<LobbyResult>("room_lobby", { p_code: code });

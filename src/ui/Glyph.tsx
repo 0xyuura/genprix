@@ -82,6 +82,47 @@ export const Backspace = ({ size = 14, className }: Props) => (
   </svg>
 );
 
+/** Daylight running. Shown on the button that switches *to* light. */
+export const Sun = ({ size = 14, className }: Props) => (
+  <svg {...svg(size, className)}>
+    <circle cx="8" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.6" />
+    <path
+      d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M12.8 3.2l-1.4 1.4M4.6 11.4l-1.4 1.4"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="square"
+    />
+  </svg>
+);
+
+/** Night race. Shown on the button that switches *to* dark. */
+export const Moon = ({ size = 14, className }: Props) => (
+  <svg {...svg(size, className)}>
+    <path
+      d="M13.2 10.1A5.6 5.6 0 016.1 2.9a5.7 5.7 0 107.1 7.2z"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/** Sound on: a speaker with two waves. */
+export const SoundOn = ({ size = 14, className }: Props) => (
+  <svg {...svg(size, className)}>
+    <path d="M2 6h2.5L8 3v10L4.5 10H2V6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    <path d="M10.4 5.8a3.4 3.4 0 010 4.4M12.6 3.8a6.4 6.4 0 010 8.4" stroke="currentColor" strokeWidth="1.5" />
+  </svg>
+);
+
+/** Sound off: the same speaker, struck out. */
+export const SoundOff = ({ size = 14, className }: Props) => (
+  <svg {...svg(size, className)}>
+    <path d="M2 6h2.5L8 3v10L4.5 10H2V6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    <path d="M10.6 6.2l3.8 3.6M14.4 6.2l-3.8 3.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+  </svg>
+);
+
 /** The five-lamp start gantry. Decorative on the home hero. */
 export const StartLights = ({ className }: { className?: string }) => (
   <div className={`flex items-center gap-1.5 ${className ?? ""}`} aria-hidden>
