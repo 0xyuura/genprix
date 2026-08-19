@@ -60,6 +60,13 @@ export interface LeaderboardAdapter {
    * the same window.
    */
   rankFor(score: number, totalMs: number): Promise<number>;
+  /**
+   * Empty the current window. Local-only, like `submit`: in secure mode the
+   * board lives on the server and only the passcode can clear it, so that path
+   * goes through `admin_clear_leaderboard` rather than through an adapter the
+   * anonymous client holds. Returns how many rows went.
+   */
+  clear(): Promise<number>;
 }
 
 // Ranking rule: whoever completed the most of the game, fastest, with the
@@ -121,6 +128,13 @@ export class LocalAdapter implements LeaderboardAdapter {
     }
     return ahead + 1;
   }
+  async clear(): Promise<number> {
+    const bucket = currentBucket();
+    const all = this.read();
+    const kept = all.filter((e) => e.bucket !== bucket);
+    localStorage.setItem(LS_KEY, JSON.stringify(kept));
+    return all.length - kept.length;
+  }
 }
 
 export class SupabaseAdapter implements LeaderboardAdapter {
@@ -152,6 +166,11 @@ export class SupabaseAdapter implements LeaderboardAdapter {
   }
   async submit(): Promise<void> {
     // no-op: secure-mode rows are written server-side by join_room / finish_run.
+  }
+  async clear(): Promise<number> {
+    // Same reason: the anonymous client cannot delete community rows. The host
+    // clears through admin_clear_leaderboard, which wants the passcode.
+    throw new Error("The shared board is cleared from the host panel.");
   }
   async rankFor(score: number, totalMs: number): Promise<number> {
     // head+count: Postgres answers with a number, not the board. One finisher

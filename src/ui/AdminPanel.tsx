@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isSecureMode } from "../data/supabase";
 import { adminGetQuestions, type AdminQuestion } from "../data/backend";
 import {
+  clearLeaderboardAny,
   createRoomAny,
   editedQuestionCount,
   inviteLinkLocal,
@@ -92,6 +93,42 @@ export default function AdminPanel({ onBack }: Props) {
       setCounting(true);
     } catch (e) {
       setMsg((e as Error).message || "Could not start the game.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Clearing the board is the one thing on this panel that destroys something,
+  // and it is a board a room full of people is looking at. So the button arms
+  // first and clears on the second press, with a few seconds to change your mind
+  // — one deliberate action, no dialog, and a stray click costs nothing.
+  const [armed, setArmed] = useState(false);
+  const [cleared, setCleared] = useState<number | null>(null);
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => void (armTimer.current && clearTimeout(armTimer.current)), []);
+
+  const disarm = () => {
+    if (armTimer.current) clearTimeout(armTimer.current);
+    armTimer.current = null;
+    setArmed(false);
+  };
+
+  const clearBoard = async () => {
+    if (!armed) {
+      setArmed(true);
+      setCleared(null);
+      setMsg(null);
+      if (armTimer.current) clearTimeout(armTimer.current);
+      armTimer.current = setTimeout(() => setArmed(false), 5000);
+      return;
+    }
+    disarm();
+    setBusy(true);
+    setMsg(null);
+    try {
+      setCleared(await clearLeaderboardAny(passcode));
+    } catch (e) {
+      setMsg((e as Error).message || "Could not clear the leaderboard.");
     } finally {
       setBusy(false);
     }
@@ -203,6 +240,33 @@ export default function AdminPanel({ onBack }: Props) {
           </button>
         </div>
       )}
+
+      {/* The board clears itself every two hours. This is for a host running two
+          rounds back to back, who should not have to wait out the window. */}
+      <div className="panel mb-4 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="stencil">Leaderboard</p>
+          <p className="text-xs text-ceramic/55 mt-1">
+            {cleared !== null
+              ? cleared === 0
+                ? "The board was already empty."
+                : `Board cleared — ${cleared} ${cleared === 1 ? "row" : "rows"} removed.`
+              : armed
+                ? "This wipes the board everyone can see. It cannot be undone."
+                : "Clears itself every two hours. Wipe it now to start a fresh round."}
+          </p>
+        </div>
+        <button
+          className={`btn-ghost !py-2 !px-4 text-sm whitespace-nowrap ${
+            armed ? "!border-bad !text-bad" : "hover:!border-bad/70 hover:!text-bad"
+          }`}
+          onClick={clearBoard}
+          onBlur={disarm}
+          disabled={busy}
+        >
+          {busy ? "…" : armed ? "Press again to clear" : "Clear leaderboard"}
+        </button>
+      </div>
 
       <p className="text-xs text-ceramic/45 mb-4">
         Edit the ten questions, then open a room. Everyone who types the code waits on the grid

@@ -126,6 +126,15 @@ export const adminPublish = (passcode: string, questions: AdminQuestion[], bumpR
     p_bump: bumpRound,
   });
 
+/**
+ * Host only: empty the board for the current window. Scoped to that window on
+ * purpose — "clear the leaderboard" means what is on the screen goes away, not
+ * every row the project has ever held. It leaves `runs` alone, so clearing is
+ * not a back door into racing the same code twice.
+ */
+export const adminClearLeaderboard = (passcode: string) =>
+  rpc<{ ok: boolean; cleared: number }>("admin_clear_leaderboard", { p_passcode: passcode });
+
 export const createRoom = (passcode: string, questions: AdminQuestion[]) =>
   rpc<{ code: string; round: number }>("create_room", {
     p_passcode: passcode,

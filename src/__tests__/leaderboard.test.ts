@@ -117,6 +117,31 @@ describe("LocalAdapter", () => {
     for (let i = 0; i < 5; i++) await a.submit(e("u" + i, i * 10, 1000));
     expect(await a.top(3)).toHaveLength(3);
   });
+
+  // The host's reset button, for running two rounds back to back rather than
+  // waiting out the two-hour window.
+  it("clear() empties the current window and says how many rows went", async () => {
+    const a = new LocalAdapter();
+    await a.submit(e("one", 300, 1000));
+    await a.submit(e("two", 200, 1000));
+    expect(await a.clear()).toBe(2);
+    expect(await a.top(10)).toEqual([]);
+  });
+  it("clear() leaves other windows alone", async () => {
+    const a = new LocalAdapter();
+    await a.submit(e("now", 300, 1000));
+    await a.submit(e("earlier", 999, 1000, currentBucket() - 1));
+    expect(await a.clear()).toBe(1);
+    expect(await a.top(10)).toEqual([]);
+    // The earlier row is not on the board either way, but clearing what is on
+    // screen must not quietly delete history that was never shown.
+    await a.submit(e("after", 100, 1000));
+    expect((await a.top(10)).map((x) => x.username)).toEqual(["after"]);
+  });
+  it("clearing an empty board reports zero rather than failing", async () => {
+    const a = new LocalAdapter();
+    expect(await a.clear()).toBe(0);
+  });
 });
 
 // Joining is what puts you on the board, so the board carries people who are

@@ -746,6 +746,29 @@ $$;
 -- Admin: publish a set of questions AND open a new room, returning a shareable code.
 -- This becomes the active game; players join via join_room(code) and then wait
 -- on the grid until start_game(code).
+-- The host's reset button. The board clears itself every two hours; this is for
+-- a host running two rounds back to back, who should not have to wait out the
+-- window.
+--
+-- Scoped to the CURRENT window on purpose: "clear the leaderboard" should mean
+-- exactly "what is on the screen goes away", not "delete every row this project
+-- has ever held". It deliberately does NOT touch `runs` — one run per name per
+-- room is checked against `runs`, so clearing the board is not a way to let
+-- somebody race the same code twice.
+create or replace function admin_clear_leaderboard(p_passcode text)
+returns jsonb language plpgsql
+security definer set search_path = public, extensions, pg_temp as $$
+declare v_n int;
+begin
+  perform admin_verify(p_passcode);
+
+  delete from scores where hour_bucket = bucket_of(now());
+  get diagnostics v_n = row_count;
+
+  return jsonb_build_object('ok', true, 'cleared', v_n);
+end;
+$$;
+
 create or replace function create_room(p_passcode text, p_questions jsonb)
 returns jsonb language plpgsql
 security definer set search_path = public, extensions, pg_temp as $$
@@ -855,6 +878,7 @@ grant execute on function start_game(text, text)                       to anon, 
 grant execute on function admin_get_questions(text)                    to anon, authenticated;
 grant execute on function admin_publish_questions(text, jsonb, boolean) to anon, authenticated;
 grant execute on function create_room(text, jsonb)                     to anon, authenticated;
+grant execute on function admin_clear_leaderboard(text)                to anon, authenticated;
 -- start_game is on that list because the passcode is the lock, exactly as it is
 -- for create_room: the browser sends a passcode, admin_verify checks it against
 -- the bcrypt hash under a 5-attempt lockout, and a wrong one gets nothing.

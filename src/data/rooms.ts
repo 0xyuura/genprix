@@ -10,6 +10,7 @@
 // farm the leaderboard. Hosts create a fresh code for the next round.
 import { isSecureMode } from "./supabase";
 import {
+  adminClearLeaderboard,
   getActiveRoom,
   joinRoom,
   createRoom,
@@ -18,6 +19,7 @@ import {
   type AdminQuestion,
   type LobbyResult,
 } from "./backend";
+import { selectAdapter } from "./leaderboard";
 import { DEFAULT_QUESTIONS, type Question } from "../game/quiz";
 import { SESSION_MS } from "../game/scoring";
 import {
@@ -362,6 +364,22 @@ export async function startGameAny(passcode: string, code: string): Promise<void
     return;
   }
   startGameLocal(passcode);
+}
+
+/**
+ * Host only: empty the leaderboard for the current window.
+ *
+ * The passcode is the lock in both modes — checked against the bcrypt hash under
+ * a lockout on the server, against the build's passcode on a demo device.
+ * Returns how many rows went, so the panel can say something true afterwards.
+ */
+export async function clearLeaderboardAny(passcode: string): Promise<number> {
+  if (isSecureMode()) {
+    const r = await adminClearLeaderboard(passcode);
+    return r.cleared;
+  }
+  if (passcode !== LOCAL_ADMIN_PASSCODE) throw new Error("Wrong passcode.");
+  return selectAdapter().clear();
 }
 
 export async function lobbyOf(code: string): Promise<Lobby> {
